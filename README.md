@@ -72,6 +72,19 @@ Quando alguém comenta uma palavra de `AUTO_REPLY_KEYWORDS`, o bot manda a DM co
 
 ---
 
+## Extensão do Chrome: LeadHunter Abridor
+
+Faz o papel da "Superagent": abre cada oportunidade numa aba, com a mensagem pronta. **Você revisa e envia.** Ela nunca envia nada sozinha.
+
+1. No **computador**, baixe [`dist/leadhunter-extensao.zip`](dist/leadhunter-extensao.zip) e descompacte.
+2. No Chrome, abra `chrome://extensions` e ligue o **Modo do desenvolvedor**, no canto superior direito.
+3. Clique em **Carregar sem compactação** e escolha a pasta `extensao`.
+4. Fixe o ícone 🧩 → LeadHunter Abridor.
+
+Uso: copie a resposta do **CAÇAR CLIENTES** no Telegram, cole na extensão, clique em **Ler oportunidades** e depois em **Abrir abas**. Em cada aba aparece um cartão com **Copiar**, **Colar na caixa** e **Abrir perfil (DM)**.
+
+---
+
 ## Estrutura
 
 ```
@@ -83,5 +96,6 @@ leadhunter/
   telegram_bot.py  conversa pelo celular + varredura diária às 7h
   meta_webhook.py  "comente QUERO" → DM nos seus posts (API oficial)
 skill/leadhunter/  versão Skill para o app do Claude
+extensao/          extensão do Chrome (abre as oportunidades com a mensagem pronta)
 tests/             testes (python -m pytest)
 ```

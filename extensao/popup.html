@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 14px system-ui, sans-serif; width: 360px; margin: 0; padding: 12px; background: #111; color: #eee; }
+  h1 { font-size: 16px; margin: 0 0 8px; }
+  textarea { width: 100%; box-sizing: border-box; height: 150px; background: #1d1d1d; color: #eee;
+             border: 1px solid #333; border-radius: 8px; padding: 8px; font: 12px system-ui; }
+  button { width: 100%; margin-top: 8px; padding: 10px; border: 0; border-radius: 8px; font-weight: 600;
+           background: #2f6df6; color: #fff; cursor: pointer; }
+  button.sec { background: #2a2a2a; }
+  button:disabled { opacity: .5; cursor: default; }
+  .info { color: #aaa; font-size: 12px; margin-top: 8px; line-height: 1.4; }
+  ul { padding-left: 18px; margin: 8px 0 0; max-height: 160px; overflow: auto; font-size: 12px; }
+  label { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; color: #ccc; }
+  input[type=number] { width: 52px; background: #1d1d1d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 4px; }
+</style>
+</head>
+<body>
+  <h1>🎯 LeadHunter Abridor</h1>
+  <textarea id="texto" placeholder="Cole aqui a resposta do CAÇAR CLIENTES do Telegram"></textarea>
+  <label>Abrir no máximo <input id="max" type="number" min="1" max="10" value="5"> abas de uma vez</label>
+  <button id="ler">Ler oportunidades</button>
+  <ul id="lista"></ul>
+  <button id="abrir" disabled>Abrir abas</button>
+  <button id="limpar" class="sec">Limpar</button>
+  <div class="info">
+    Cada aba mostra um cartão com a mensagem pronta. Você revisa e envia.
+    A extensão nunca envia nada sozinha. Dica: 15–30 abordagens por dia, no máximo 1–2 por vídeo.
+  </div>
+  <script src="parser.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
