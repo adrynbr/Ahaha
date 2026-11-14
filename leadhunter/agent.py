@@ -276,11 +276,27 @@ def _chamada_sem_nome(texto: str, esquemas: dict[str, dict] | None) -> tuple[str
     return texto[:m.start()].strip(), compativeis[0], args
 
 
+MAX_CORRECOES = 2
+MSG_CORRECAO = (
+    "[sistema] Não entendi o pedido de ferramenta da sua última mensagem. Se quis usar uma "
+    "ferramenta, repita só a chamada, exatamente assim: "
+    '<<ferramenta NOME>>{"parametro": "valor"}' + FIM_CHAMADA + " (NOME é um dos nomes da lista). "
+    "Se já tem a resposta final, escreva-a sem nenhuma marcação, em português."
+)
+_PISTAS = re.compile(r"<<|>>|<\s*/?\s*tool|\{\s*\"(consulta|url|texto|nome|op_id|limite|ator)\"")
+
+
+def parece_chamada(texto: str) -> bool:
+    """O texto tem cara de tentativa de chamada de ferramenta (marcadores ou JSON de parâmetros)."""
+    return bool(_PISTAS.search(texto))
+
+
 def limpar_marcacoes(texto: str) -> str:
     """Remove restos do protocolo de ferramentas de uma resposta final."""
     texto = re.sub(r"<<ferramenta[^\n]*", "", texto)
     texto = re.sub(r"</?tool_call>[^\n]*", "", texto)
     texto = re.sub(r"<<[^<>\n]{0,40}>>[ \t]*\{[^\n]*", "", texto)
+    texto = re.sub(r"<<[^<>\n]{0,40}>>", "", texto)
     return re.sub(r"<<\s*fim\s*>?>?", "", texto).strip()
 
 
@@ -315,6 +331,7 @@ class LeadHunter:
         esquemas = {t.name: t.to_dict()["input_schema"] for t in tools}
         system = SYSTEM_PROMPT + instrucoes_ferramentas_texto(tools)
         conversa = list(mensagens)
+        correcoes = 0
         for _ in range(MAX_PASSOS_COMPAT):
             msg = self.client.messages.create(
                 model=settings.anthropic_model,
@@ -328,6 +345,16 @@ class LeadHunter:
             texto = "\n".join(b.text for b in msg.content if b.type == "text").strip()
             chamada = extrair_chamada(texto, set(por_nome), esquemas)
             if not chamada:
+                if parece_chamada(texto) and correcoes < MAX_CORRECOES:
+                    # Autocorreção: o modelo tentou usar uma ferramenta num formato que não
+                    # deu para entender. Pede para repetir no formato certo em vez de mandar
+                    # o texto cru para o usuário.
+                    correcoes += 1
+                    log.warning("Chamada não reconhecida; pedindo correção (%d): %r",
+                                correcoes, texto[-200:])
+                    conversa.append({"role": "assistant", "content": texto})
+                    conversa.append({"role": "user", "content": MSG_CORRECAO})
+                    continue
                 return limpar_marcacoes(texto) or "(sem resposta)"
             antes, nome, args = chamada
             ferramenta = por_nome.get(nome)

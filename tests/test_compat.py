@@ -181,3 +181,41 @@ def test_buscar_e_ler_pagina_com_http_falso():
     assert "instagram.com/reel/ABC" in web.buscar("caneta", http=http)
     assert web.ler_pagina("https://loja.com", http=http) == "Quanto custa? Entrega em SP?"
     assert web.ler_pagina("ftp://x") == "URL inválida."
+
+
+def test_autocorrecao_de_chamada_ilegivel(tmp_path, monkeypatch):
+    monkeypatch.setattr(agent_mod, "settings", replace(agent_mod.settings, modo_compativel="sim"))
+    monkeypatch.setattr(agent_mod.web, "buscar", lambda consulta: f"achei {consulta}")
+    respostas = iter([
+        _resposta("Vou buscar.\n<<???>> consulta=aspirador"),            # ilegível
+        _resposta('<<ferramenta buscar_web>>{"consulta": "aspirador"}', "stop_sequence"),
+        _resposta("Pronto: 2 oportunidades."),
+    ])
+    corpos = []
+
+    def handler(req):
+        corpos.append(json.loads(req.content))
+        return httpx2.Response(200, json=next(respostas))
+
+    lh = agent_mod.LeadHunter(Storage(str(tmp_path / "t.db")), _cliente(handler))
+    assert lh.responder(1, "CAÇAR CLIENTES") == "Pronto: 2 oportunidades."
+    segundo = corpos[1]["messages"]
+    assert segundo[-1]["content"].startswith("[sistema] Não entendi")
+
+
+def test_autocorrecao_tem_limite(tmp_path, monkeypatch):
+    monkeypatch.setattr(agent_mod, "settings", replace(agent_mod.settings, modo_compativel="sim"))
+    corpos = []
+
+    def handler(req):
+        corpos.append(1)
+        return httpx2.Response(200, json=_resposta("Resultado parcial <<???>>"))
+
+    lh = agent_mod.LeadHunter(Storage(str(tmp_path / "t.db")), _cliente(handler))
+    assert lh.responder(1, "oi") == "Resultado parcial"
+    assert len(corpos) == 3  # 1 tentativa + 2 correções
+
+
+def test_texto_normal_nao_dispara_correcao():
+    assert not agent_mod.parece_chamada("Achei 3 clientes em SP. Preço médio R$ 119,90.")
+    assert agent_mod.parece_chamada('<<ferroughta?>> {"consulta": "x"')
