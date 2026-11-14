@@ -30,7 +30,7 @@ def test_auto_troca_para_modo_compativel(tmp_path, monkeypatch):
     def handler(req):
         corpo = json.loads(req.content)
         corpos.append(corpo)
-        if any(t.get("name") == "web_search" for t in corpo["tools"]):
+        if any(t.get("name") == "web_search" for t in corpo.get("tools", [])):
             return httpx2.Response(400, json={"type": "error", "error": {
                 "type": "invalid_request_error", "message": "unsupported tool"}})
         return httpx2.Response(200, json=RESPOSTA_OK)
@@ -39,12 +39,51 @@ def test_auto_troca_para_modo_compativel(tmp_path, monkeypatch):
     assert lh.responder(1, "oi") == "ok"
     assert lh.compat is True
     segundo = corpos[1]
-    nomes = [t["name"] for t in segundo["tools"]]
-    assert nomes[:2] == ["buscar_web", "ler_pagina"]
+    assert "tools" not in segundo, "modo compatível não envia ferramentas nativas"
+    assert "<<ferramenta NOME>>" in segundo["system"] and "buscar_web(" in segundo["system"]
+    assert segundo["stop_sequences"] == ["<<fim>>"]
     assert "fallbacks" not in segundo and "cache_control" not in segundo
     # Próximas mensagens já vão direto no modo compatível
     lh.responder(1, "de novo")
-    assert len(corpos) == 3 and corpos[2]["tools"][0]["name"] == "buscar_web"
+    assert len(corpos) == 3 and "tools" not in corpos[2]
+
+
+def _resposta(texto, stop="end_turn"):
+    return {**RESPOSTA_OK, "content": [{"type": "text", "text": texto}], "stop_reason": stop}
+
+
+def test_loop_de_ferramentas_por_texto(tmp_path, monkeypatch):
+    monkeypatch.setattr(agent_mod, "settings", replace(agent_mod.settings, modo_compativel="sim"))
+    monkeypatch.setattr(agent_mod.web, "buscar", lambda consulta: f"resultados para {consulta}")
+    respostas = iter([
+        _resposta('Vou pesquisar.\n<<ferramenta buscar_web>>{"consulta": "caneta depiladora"}', "stop_sequence"),
+        _resposta('<<ferramenta salvar_nota>>{"texto": "gosta de SP"}', "stop_sequence"),
+        _resposta("Achei 3 oportunidades."),
+    ])
+    corpos = []
+
+    def handler(req):
+        corpos.append(json.loads(req.content))
+        return httpx2.Response(200, json=next(respostas))
+
+    s = Storage(str(tmp_path / "t.db"))
+    lh = agent_mod.LeadHunter(s, _cliente(handler))
+    assert lh.responder(1, "CAÇAR CLIENTES") == "Achei 3 oportunidades."
+    ultimo = corpos[-1]["messages"]
+    papeis = [m["role"] for m in ultimo]
+    assert papeis == ["user", "assistant", "user", "assistant", "user"]
+    assert all(isinstance(m["content"], str) for m in ultimo), "só texto, sem blocos de ferramenta"
+    assert ultimo[2]["content"] == "[resultado buscar_web]\nresultados para caneta depiladora"
+    assert ultimo[4]["content"] == "[resultado salvar_nota]\nNota salva."
+    assert s.notas(1) == ["gosta de SP"]
+
+
+def test_extrair_chamada():
+    assert agent_mod.extrair_chamada("oi") is None
+    assert agent_mod.extrair_chamada('a\n<<ferramenta ler_pagina>>{"url": "https://x"}<<fim>>') == (
+        "a", "ler_pagina", {"url": "https://x"})
+    assert agent_mod.extrair_chamada("<<ferramenta trocar_produto>>") == ("", "trocar_produto", {})
+    assert agent_mod.extrair_chamada("<<ferramenta buscar_web>>{quebrado}")[2] == {"__erro__": "{quebrado}"}
 
 
 def test_sem_base_url_nao_troca(tmp_path, monkeypatch):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -183,6 +184,53 @@ def _texto_final(msg) -> str:
     return texto or "(sem resposta)"
 
 
+# --- Modo compatível: ferramentas por texto -------------------------------------------
+# Alguns provedores "compatíveis" (ex.: KPA Labz) recusam o formato nativo de ferramentas
+# (tool_use/tool_result). Nesse modo, o modelo pede ferramentas em texto simples e o bot
+# devolve o resultado como mensagem comum, sem nenhum bloco especial.
+
+FIM_CHAMADA = "<<fim>>"
+_CHAMADA = re.compile(r"<<ferramenta\s+([a-z_]+)>>\s*(\{.*\})?\s*$", re.S)
+MAX_PASSOS_COMPAT = 25
+
+
+def instrucoes_ferramentas_texto(tools: list) -> str:
+    linhas = [
+        "",
+        "# Como usar ferramentas (IMPORTANTE)",
+        "Para usar uma ferramenta, termine sua mensagem com UMA chamada exatamente neste formato:",
+        '<<ferramenta NOME>>{"parametro": "valor"}' + FIM_CHAMADA,
+        "Use uma ferramenta por mensagem. O resultado chega na próxima mensagem como "
+        "[resultado NOME]. Quando tiver a resposta final para o usuário, escreva-a sem nenhuma chamada.",
+        "Ferramentas disponíveis:",
+    ]
+    for t in tools:
+        d = t.to_dict()
+        props = d["input_schema"].get("properties", {})
+        params = ", ".join(
+            f'{k} ({v.get("type", "texto")}{"" if k in d["input_schema"].get("required", []) else ", opcional"})'
+            for k, v in props.items()
+        )
+        descricao = " ".join(d.get("description", "").split())
+        linhas.append(f"- {d['name']}({params}): {descricao}")
+    return "\n".join(linhas)
+
+
+def extrair_chamada(texto: str) -> tuple[str, str, dict] | None:
+    """Separa (texto_antes, nome, argumentos) se a mensagem termina com uma chamada."""
+    i = texto.rfind("<<ferramenta")
+    if i < 0:
+        return None
+    m = _CHAMADA.match(texto[i:].replace(FIM_CHAMADA, "").strip())
+    if not m:
+        return None
+    try:
+        args = json.loads(m.group(2)) if m.group(2) else {}
+    except json.JSONDecodeError:
+        args = {"__erro__": m.group(2)}
+    return texto[:i].strip(), m.group(1), args
+
+
 class LeadHunter:
     def __init__(self, storage: Storage, client: anthropic.Anthropic | None = None):
         self.storage = storage
@@ -192,25 +240,62 @@ class LeadHunter:
         self.compat = settings.modo_compativel in ("sim", "1", "true")
 
     def _chamar(self, user_id: int, mensagens: list[dict]):
-        comum = dict(
+        if self.compat:
+            return self._chamar_compat(user_id, mensagens)
+        return self.client.beta.messages.tool_runner(
             model=settings.anthropic_model,
             max_tokens=16000,
             system=SYSTEM_PROMPT,
             messages=mensagens,
             max_iterations=40,
-        )
-        if self.compat:
-            tools = _ferramentas_web() + _ferramentas(self.storage, user_id)
-            return self.client.beta.messages.tool_runner(tools=tools, **comum).until_done()
-        return self.client.beta.messages.tool_runner(
             tools=SERVER_TOOLS + _ferramentas(self.storage, user_id),
             thinking={"type": "adaptive"},
             output_config={"effort": settings.effort},
             cache_control={"type": "ephemeral"},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-            **comum,
         ).until_done()
+
+    def _chamar_compat(self, user_id: int, mensagens: list[dict]) -> str:
+        tools = _ferramentas_web() + _ferramentas(self.storage, user_id)
+        por_nome = {t.name: t for t in tools}
+        system = SYSTEM_PROMPT + instrucoes_ferramentas_texto(tools)
+        conversa = list(mensagens)
+        for _ in range(MAX_PASSOS_COMPAT):
+            msg = self.client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=16000,
+                system=system,
+                messages=conversa,
+                stop_sequences=[FIM_CHAMADA],
+            )
+            if msg.stop_reason == "refusal":
+                return "⚠️ Não consegui completar esse pedido. Tente reformular."
+            texto = "\n".join(b.text for b in msg.content if b.type == "text").strip()
+            chamada = extrair_chamada(texto)
+            if not chamada:
+                return texto or "(sem resposta)"
+            _, nome, args = chamada
+            ferramenta = por_nome.get(nome)
+            if ferramenta is None:
+                resultado = f"Erro: ferramenta '{nome}' não existe."
+            elif "__erro__" in args:
+                resultado = "Erro: os parâmetros não são um JSON válido. Tente de novo."
+            else:
+                try:
+                    resultado = str(ferramenta.call(args))
+                except Exception as e:  # noqa: BLE001 - erro vira resultado para o modelo
+                    resultado = f"Erro ao executar {nome}: {e}"
+            log.info("Ferramenta (modo compatível): %s", nome)
+            # Só texto: nenhum bloco tool_use/tool_result atravessa o provedor.
+            conversa.append({"role": "assistant", "content": texto + FIM_CHAMADA})
+            conversa.append({"role": "user", "content": f"[resultado {nome}]\n{resultado}"})
+        conversa.append({"role": "user", "content":
+                         "Limite de buscas atingido. Entregue agora o melhor resultado com o que já tem, "
+                         "sem chamar ferramentas."})
+        msg = self.client.messages.create(model=settings.anthropic_model, max_tokens=16000,
+                                          system=system, messages=conversa)
+        return "\n".join(b.text for b in msg.content if b.type == "text").strip() or "(sem resposta)"
 
     def responder(self, user_id: int, mensagem: str) -> str:
         hoje = datetime.now(ZoneInfo(settings.timezone)).strftime("%d/%m/%Y %H:%M (%A)")
@@ -248,7 +333,7 @@ class LeadHunter:
         except anthropic.APIConnectionError:
             return "⚠️ Sem conexão com o serviço de IA. Tente de novo."
 
-        resposta = _texto_final(final)
+        resposta = final if isinstance(final, str) else _texto_final(final)
         # Histórico só com texto (barato e simples). Dados importantes ficam nas tabelas.
         self.storage.adicionar_historico(user_id, "user", mensagem)
         self.storage.adicionar_historico(user_id, "assistant", resposta)
