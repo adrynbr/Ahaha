@@ -108,6 +108,22 @@ def test_formato_tool_call_da_kpa():
     assert agent_mod.extrair_chamada('outra{"a": 1}', nomes) is None
 
 
+def test_marcador_embaralhado_sem_nome():
+    from leadhunter.agent import _ferramentas, _ferramentas_web
+    from leadhunter.storage import Storage as S
+    tools = _ferramentas_web() + _ferramentas(S(":memory:"), 1)
+    esquemas = {t.name: t.to_dict()["input_schema"] for t in tools}
+    nomes = set(esquemas)
+    real = ('Vou buscar problemas específicos, como areia no carro.\n'
+            '<<ferroughta?>>{"consulta": "sand in car vacuum TikTok"}')
+    assert agent_mod.extrair_chamada(real, nomes, esquemas) == (
+        "Vou buscar problemas específicos, como areia no carro.", "buscar_web",
+        {"consulta": "sand in car vacuum TikTok"})
+    assert agent_mod.extrair_chamada('<<x>>{"url": "https://a"}', nomes, esquemas)[1] == "ler_pagina"
+    # Campos que não batem com nenhuma ferramenta: não é chamada
+    assert agent_mod.extrair_chamada('<<x>>{"foo": 1}', nomes, esquemas) is None
+
+
 def test_limpar_marcacoes():
     assert agent_mod.limpar_marcacoes("Pronto!<<fim><<fim>>") == "Pronto!"
     assert agent_mod.limpar_marcacoes("Ok.\n<tool_call>agente>x{}") == "Ok."

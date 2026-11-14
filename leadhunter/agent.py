@@ -216,7 +216,8 @@ def instrucoes_ferramentas_texto(tools: list) -> str:
     return "\n".join(linhas)
 
 
-def extrair_chamada(texto: str, nomes: set[str] | None = None) -> tuple[str, str, dict] | None:
+def extrair_chamada(texto: str, nomes: set[str] | None = None,
+                    esquemas: dict[str, dict] | None = None) -> tuple[str, str, dict] | None:
     """Separa (texto_antes, nome, argumentos) da PRIMEIRA chamada na mensagem.
 
     Tolerante a formatos variados que o modelo usa via provedores compatíveis:
@@ -235,7 +236,7 @@ def extrair_chamada(texto: str, nomes: set[str] | None = None) -> tuple[str, str
         if m2:
             candidatos.append((m2.start(), m2.end(), m2.group(1)))
     if not candidatos:
-        return None
+        return _chamada_sem_nome(texto, esquemas)
     inicio, fim, nome = min(candidatos)
     # Tira a "marcação" que antecede o nome na mesma linha (ex.: "<tool_call>agente>").
     antes = re.sub(r"[<\[][^\n]*$", "", texto[:inicio]).strip()
@@ -249,10 +250,37 @@ def extrair_chamada(texto: str, nomes: set[str] | None = None) -> tuple[str, str
     return antes, nome, args if isinstance(args, dict) else {"__erro__": resto[:200]}
 
 
+def _chamada_sem_nome(texto: str, esquemas: dict[str, dict] | None) -> tuple[str, str, dict] | None:
+    """Marcador embaralhado sem nome (ex.: '<<ferroughta?>>{"consulta": "x"}').
+
+    Descobre a ferramenta pelos campos do JSON: a única cujos parâmetros obrigatórios
+    estão presentes e que aceita todos os campos enviados.
+    """
+    if not esquemas:
+        return None
+    m = re.search(r"<<[^<>\n]{0,40}>>[ \t]*(?=\{)", texto)
+    if not m:
+        return None
+    try:
+        args, _ = json.JSONDecoder().raw_decode(texto[m.end():])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(args, dict) or not args:
+        return None
+    compativeis = [
+        nome for nome, esq in esquemas.items()
+        if set(esq.get("required", [])) <= set(args) <= set(esq.get("properties", {}))
+    ]
+    if len(compativeis) != 1:
+        return None
+    return texto[:m.start()].strip(), compativeis[0], args
+
+
 def limpar_marcacoes(texto: str) -> str:
     """Remove restos do protocolo de ferramentas de uma resposta final."""
     texto = re.sub(r"<<ferramenta[^\n]*", "", texto)
     texto = re.sub(r"</?tool_call>[^\n]*", "", texto)
+    texto = re.sub(r"<<[^<>\n]{0,40}>>[ \t]*\{[^\n]*", "", texto)
     return re.sub(r"<<\s*fim\s*>?>?", "", texto).strip()
 
 
@@ -284,6 +312,7 @@ class LeadHunter:
     def _chamar_compat(self, user_id: int, mensagens: list[dict]) -> str:
         tools = _ferramentas_web() + _ferramentas(self.storage, user_id)
         por_nome = {t.name: t for t in tools}
+        esquemas = {t.name: t.to_dict()["input_schema"] for t in tools}
         system = SYSTEM_PROMPT + instrucoes_ferramentas_texto(tools)
         conversa = list(mensagens)
         for _ in range(MAX_PASSOS_COMPAT):
@@ -297,7 +326,7 @@ class LeadHunter:
             if msg.stop_reason == "refusal":
                 return "⚠️ Não consegui completar esse pedido. Tente reformular."
             texto = "\n".join(b.text for b in msg.content if b.type == "text").strip()
-            chamada = extrair_chamada(texto, set(por_nome))
+            chamada = extrair_chamada(texto, set(por_nome), esquemas)
             if not chamada:
                 return limpar_marcacoes(texto) or "(sem resposta)"
             antes, nome, args = chamada
