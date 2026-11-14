@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import anthropic
 from anthropic import beta_tool
 
-from . import apify
+from . import apify, web
 from .config import settings
 from .prompts import SYSTEM_PROMPT, contexto_usuario
 from .storage import Storage
@@ -26,6 +26,30 @@ SERVER_TOOLS = [
     },
     {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 20},
 ]
+
+
+def _ferramentas_web() -> list:
+    """Busca própria, para provedores sem a busca na web da Anthropic."""
+
+    @beta_tool
+    def buscar_web(consulta: str) -> str:
+        """Pesquisa na web e devolve até 10 resultados (título, link, trecho).
+
+        Args:
+            consulta: Termos de busca. Aceita operadores como site:instagram.com.
+        """
+        return web.buscar(consulta)
+
+    @beta_tool
+    def ler_pagina(url: str) -> str:
+        """Abre uma página pública e devolve o texto dela.
+
+        Args:
+            url: Endereço completo da página (https://...).
+        """
+        return web.ler_pagina(url)
+
+    return [buscar_web, ler_pagina]
 
 
 def _ferramentas(storage: Storage, user_id: int) -> list:
@@ -162,7 +186,31 @@ def _texto_final(msg) -> str:
 class LeadHunter:
     def __init__(self, storage: Storage, client: anthropic.Anthropic | None = None):
         self.storage = storage
-        self.client = client or anthropic.Anthropic()
+        self.client = client or anthropic.Anthropic(base_url=settings.base_url or None)
+        # Modo compatível: sem recursos exclusivos da API oficial (busca da Anthropic,
+        # fallbacks, cache). Usado em provedores como a KPA Labz.
+        self.compat = settings.modo_compativel in ("sim", "1", "true")
+
+    def _chamar(self, user_id: int, mensagens: list[dict]):
+        comum = dict(
+            model=settings.anthropic_model,
+            max_tokens=16000,
+            system=SYSTEM_PROMPT,
+            messages=mensagens,
+            max_iterations=40,
+        )
+        if self.compat:
+            tools = _ferramentas_web() + _ferramentas(self.storage, user_id)
+            return self.client.beta.messages.tool_runner(tools=tools, **comum).until_done()
+        return self.client.beta.messages.tool_runner(
+            tools=SERVER_TOOLS + _ferramentas(self.storage, user_id),
+            thinking={"type": "adaptive"},
+            output_config={"effort": settings.effort},
+            cache_control={"type": "ephemeral"},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            **comum,
+        ).until_done()
 
     def responder(self, user_id: int, mensagem: str) -> str:
         hoje = datetime.now(ZoneInfo(settings.timezone)).strftime("%d/%m/%Y %H:%M (%A)")
@@ -174,22 +222,22 @@ class LeadHunter:
         ]
 
         try:
-            runner = self.client.beta.messages.tool_runner(
-                model=settings.anthropic_model,
-                max_tokens=16000,
-                system=SYSTEM_PROMPT,
-                tools=SERVER_TOOLS + _ferramentas(self.storage, user_id),
-                messages=mensagens,
-                thinking={"type": "adaptive"},
-                output_config={"effort": settings.effort},
-                cache_control={"type": "ephemeral"},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                max_iterations=40,
-            )
-            final = runner.until_done()
+            try:
+                final = self._chamar(user_id, mensagens)
+            except anthropic.BadRequestError:
+                pode_trocar = settings.modo_compativel == "auto" and settings.base_url
+                if self.compat or not pode_trocar:
+                    raise
+                log.warning("Provedor recusou recursos da API oficial; ativando modo compatível.")
+                self.compat = True
+                final = self._chamar(user_id, mensagens)
+        except anthropic.AuthenticationError:
+            return "🔑 Chave da API inválida ou vencida. Confira ANTHROPIC_API_KEY."
+        except anthropic.NotFoundError:
+            return (f"⚠️ O provedor não tem o modelo '{settings.anthropic_model}'. "
+                    "Troque a variável ANTHROPIC_MODEL (ex.: claude-sonnet-5-5).")
         except anthropic.RateLimitError:
-            return "⏳ Muitas buscas ao mesmo tempo. Tente de novo em 1 minuto."
+            return "⏳ Limite de uso atingido. Tente de novo mais tarde."
         except anthropic.APIStatusError as e:
             log.exception("Erro da API Claude")
             return f"⚠️ Erro no serviço de IA ({e.status_code}). Tente de novo mais tarde."

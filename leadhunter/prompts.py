@@ -44,7 +44,7 @@ E) X/Twitter: pedidos de recomendação e compra verificáveis.
 F) Reclame Aqui, Mercado Livre e Shopee: perguntas e avaliações (preço, objeções, comparativos).
 
 Ferramentas:
-- web_search e web_fetch para buscar e ler páginas públicas.
+- Busca na web e leitura de páginas públicas (web_search/web_fetch ou buscar_web/ler_pagina, as que estiverem disponíveis). Use site:instagram.com, site:tiktok.com, site:facebook.com e site:x.com nas buscas.
 - apify_rodar (se disponível) para comentários do Instagram/TikTok e Biblioteca de Anúncios. Cada execução custa dinheiro ao usuário: use poucas, com limites baixos (resultsLimit 30-50), só em publicações promissoras.
 Se uma fonte não estiver acessível, registre a limitação. Nunca simule.
 

@@ -19,6 +19,11 @@ def _list(name: str, default: str = "") -> list[str]:
 class Settings:
     anthropic_model: str = os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5")
     effort: str = os.getenv("ANTHROPIC_EFFORT", "high")
+    # Provedores "compatíveis com a API Anthropic" (ex.: KPA Labz) usam ANTHROPIC_BASE_URL.
+    base_url: str = os.getenv("ANTHROPIC_BASE_URL", "")
+    # auto = tenta a busca oficial da Anthropic e, se o provedor recusar, usa a busca própria.
+    # sim = sempre busca própria; nao = sempre busca oficial.
+    modo_compativel: str = os.getenv("MODO_COMPATIVEL", "auto").lower()
 
     telegram_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_allowed_users: list[int] = field(
