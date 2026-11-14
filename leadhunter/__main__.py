@@ -7,11 +7,8 @@ import logging
 import os
 import sys
 
-import uvicorn
-
 from .agent import LeadHunter
 from .config import settings
-from .meta_webhook import criar_app
 from .storage import Storage
 from .telegram_bot import criar_aplicacao
 
@@ -29,6 +26,11 @@ async def main() -> None:
     # Sem ele, o bot do Telegram roda sozinho e não precisa de porta nem link público.
     servidor = None
     if settings.meta_page_token:
+        # Importado só aqui: fastapi/uvicorn ficam em requirements-meta.txt (opcional).
+        import uvicorn
+
+        from .meta_webhook import criar_app
+
         servidor = uvicorn.Server(uvicorn.Config(criar_app(settings, storage), host="0.0.0.0",
                                                  port=settings.port, log_level="info"))
     async with bot:

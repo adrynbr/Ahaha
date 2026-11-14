@@ -52,6 +52,7 @@ O bot do Telegram não precisa de porta nem link público. O "comente QUERO" só
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-meta.txt  # só se for usar o "comente QUERO"
 cp .env.example .env   # e preencha
 python -m leadhunter
 ```
@@ -65,6 +66,7 @@ Precisa de um app na Meta (developers.facebook.com) ligado à sua Página e ao I
 - URL do webhook: `https://SEU-SERVIDOR/meta/webhook`
 - Token de verificação: o valor de `META_VERIFY_TOKEN`
 - Assine os campos `comments` (Instagram) e `feed` (Página).
+Para isso, inclua as bibliotecas de `requirements-meta.txt` no `requirements.txt`.
 Quando alguém comenta uma palavra de `AUTO_REPLY_KEYWORDS`, o bot manda a DM com `AUTO_REPLY_DM` e responde o comentário com `AUTO_REPLY_PUBLIC`. É uma vez por comentário, como a Meta exige.
 
 ---
