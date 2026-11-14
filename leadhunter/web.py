@@ -47,7 +47,41 @@ def analisar_busca(html: str, limite: int = 10) -> list[dict]:
     return saida
 
 
-def buscar(consulta: str, http: httpx.Client | None = None, limite: int = 10) -> str:
+PERIODOS_SERPER = {"dia": "qdr:d", "semana": "qdr:w", "mes": "qdr:m", "ano": "qdr:y"}
+
+
+def _formatar(resultados: list[dict]) -> str:
+    linhas = []
+    for x in resultados:
+        data = f" ({x['data']})" if x.get("data") else ""
+        linhas.append(f"- {x['titulo']}{data}\n  {x['link']}\n  {x['trecho']}")
+    return "\n".join(linhas)
+
+
+def buscar_serper(consulta: str, chave: str, periodo: str = "", http: httpx.Client | None = None,
+                  limite: int = 10) -> str | None:
+    """Busca no Google via Serper.dev. Retorna None se falhar (para cair na busca gratuita)."""
+    http = http or httpx.Client(timeout=20)
+    corpo = {"q": consulta, "gl": "br", "hl": "pt-br", "num": limite}
+    if periodo in PERIODOS_SERPER:
+        corpo["tbs"] = PERIODOS_SERPER[periodo]
+    try:
+        r = http.post("https://google.serper.dev/search", json=corpo,
+                      headers={"X-API-KEY": chave, "Content-Type": "application/json"})
+    except httpx.HTTPError:
+        return None
+    if r.status_code >= 400:
+        return None
+    dados = r.json()
+    resultados = [
+        {"titulo": o.get("title", ""), "link": o.get("link", ""),
+         "trecho": o.get("snippet", ""), "data": o.get("date", "")}
+        for o in dados.get("organic", [])[:limite]
+    ]
+    return _formatar(resultados) if resultados else "Nenhum resultado."
+
+
+def buscar_ddg(consulta: str, http: httpx.Client | None = None, limite: int = 10) -> str:
     http = http or httpx.Client(timeout=20, headers={"User-Agent": UA}, follow_redirects=True)
     try:
         r = http.post("https://html.duckduckgo.com/html/", data={"q": consulta, "kl": "br-pt"})
@@ -56,9 +90,17 @@ def buscar(consulta: str, http: httpx.Client | None = None, limite: int = 10) ->
     if r.status_code >= 400:
         return f"Busca indisponível ({r.status_code}). Tente outra consulta mais tarde."
     resultados = analisar_busca(r.text, limite)
-    if not resultados:
-        return "Nenhum resultado."
-    return "\n".join(f"- {x['titulo']}\n  {x['link']}\n  {x['trecho']}" for x in resultados)
+    return _formatar(resultados) if resultados else "Nenhum resultado."
+
+
+def buscar(consulta: str, periodo: str = "", chave_serper: str = "",
+           http: httpx.Client | None = None, limite: int = 10) -> str:
+    """Google (Serper) quando houver chave; senão, ou se falhar, DuckDuckGo."""
+    if chave_serper:
+        r = buscar_serper(consulta, chave_serper, periodo, http=http, limite=limite)
+        if r is not None:
+            return r
+    return buscar_ddg(consulta, http=http, limite=limite)
 
 
 class _Texto(HTMLParser):

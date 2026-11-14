@@ -31,6 +31,7 @@ Você precisa de:
 | Bot do Telegram | fale com o **@BotFather** no Telegram → `/newbot` | grátis |
 | Seu ID do Telegram | fale com o **@userinfobot** | grátis |
 | Apify (opcional, comentários IG/TikTok/Biblioteca) | apify.com | tem plano grátis |
+| Serper (opcional, busca no Google) | serper.dev | 2.500 buscas grátis |
 | Servidor | Railway, Render ou uma VPS | ~US$5/mês |
 
 ### Subir na Shard Cloud (ou Square Cloud / Discloud)

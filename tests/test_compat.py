@@ -54,7 +54,7 @@ def _resposta(texto, stop="end_turn"):
 
 def test_loop_de_ferramentas_por_texto(tmp_path, monkeypatch):
     monkeypatch.setattr(agent_mod, "settings", replace(agent_mod.settings, modo_compativel="sim"))
-    monkeypatch.setattr(agent_mod.web, "buscar", lambda consulta: f"resultados para {consulta}")
+    monkeypatch.setattr(agent_mod.web, "buscar", lambda consulta, **kw: f"resultados para {consulta}")
     respostas = iter([
         _resposta('Vou pesquisar.\n<<ferramenta buscar_web>>{"consulta": "caneta depiladora"}', "stop_sequence"),
         _resposta('<<ferramenta salvar_nota>>{"texto": "gosta de SP"}', "stop_sequence"),
@@ -185,7 +185,7 @@ def test_buscar_e_ler_pagina_com_http_falso():
 
 def test_autocorrecao_de_chamada_ilegivel(tmp_path, monkeypatch):
     monkeypatch.setattr(agent_mod, "settings", replace(agent_mod.settings, modo_compativel="sim"))
-    monkeypatch.setattr(agent_mod.web, "buscar", lambda consulta: f"achei {consulta}")
+    monkeypatch.setattr(agent_mod.web, "buscar", lambda consulta, **kw: f"achei {consulta}")
     respostas = iter([
         _resposta("Vou buscar.\n<<???>> consulta=aspirador"),            # ilegível
         _resposta('<<ferramenta buscar_web>>{"consulta": "aspirador"}', "stop_sequence"),
@@ -219,3 +219,31 @@ def test_autocorrecao_tem_limite(tmp_path, monkeypatch):
 def test_texto_normal_nao_dispara_correcao():
     assert not agent_mod.parece_chamada("Achei 3 clientes em SP. Preço médio R$ 119,90.")
     assert agent_mod.parece_chamada('<<ferroughta?>> {"consulta": "x"')
+
+
+def test_serper_e_queda_para_ddg():
+    pedidos = []
+
+    def handler(req):
+        pedidos.append(req)
+        if req.url.host == "google.serper.dev":
+            corpo = json.loads(req.content)
+            assert req.headers["X-API-KEY"] == "k" and corpo["gl"] == "br" and corpo["tbs"] == "qdr:w"
+            return httpx.Response(200, json={"organic": [
+                {"title": "Aspirador portátil vale a pena?", "link": "https://reddit.com/r/x/1",
+                 "snippet": "alguém indica um aspirador pro carro?", "date": "2 dias atrás"}]})
+        return httpx.Response(200, text=DDG_HTML)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    r = web.buscar("aspirador carro", periodo="semana", chave_serper="k", http=http)
+    assert "reddit.com/r/x/1" in r and "(2 dias atrás)" in r
+
+    def falha(req):
+        if req.url.host == "google.serper.dev":
+            return httpx.Response(403, json={"message": "sem créditos"})
+        return httpx.Response(200, text=DDG_HTML)
+
+    http2 = httpx.Client(transport=httpx.MockTransport(falha))
+    assert "instagram.com/reel/ABC" in web.buscar("x", chave_serper="k", http=http2)
+    # sem chave: vai direto no DuckDuckGo
+    assert "instagram.com/reel/ABC" in web.buscar("x", http=http2)

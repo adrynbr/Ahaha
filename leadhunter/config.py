@@ -31,6 +31,7 @@ class Settings:
     )
 
     apify_token: str = os.getenv("APIFY_TOKEN", "")
+    serper_api_key: str = os.getenv("SERPER_API_KEY", "")
 
     meta_verify_token: str = os.getenv("META_VERIFY_TOKEN", "")
     meta_app_secret: str = os.getenv("META_APP_SECRET", "")

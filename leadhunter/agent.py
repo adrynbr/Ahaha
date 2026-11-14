@@ -33,13 +33,14 @@ def _ferramentas_web() -> list:
     """Busca própria, para provedores sem a busca na web da Anthropic."""
 
     @beta_tool
-    def buscar_web(consulta: str) -> str:
-        """Pesquisa na web e devolve até 10 resultados (título, link, trecho).
+    def buscar_web(consulta: str, periodo: str = "") -> str:
+        """Pesquisa no Google e devolve até 10 resultados (título, link, trecho, data).
 
         Args:
             consulta: Termos de busca. Aceita operadores como site:instagram.com.
+            periodo: Só resultados recentes: dia, semana, mes ou ano. Vazio = qualquer data.
         """
-        return web.buscar(consulta)
+        return web.buscar(consulta, periodo=periodo, chave_serper=settings.serper_api_key)
 
     @beta_tool
     def ler_pagina(url: str) -> str:
