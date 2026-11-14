@@ -35,7 +35,7 @@
       <div class="ok"></div>
     </div>`;
   const r = caixa.shadowRoot;
-  r.querySelector(".f").textContent = item.fala ? `“${item.fala.replace(/^[“"]|[”"]$/g, "")}”` : "";
+  r.querySelector(".f").textContent = item.fala || "";
   r.querySelector("textarea").value = item.sugestao;
   const aviso = (t) => { r.querySelector(".ok").textContent = t; };
   const texto = () => r.querySelector("textarea").value;

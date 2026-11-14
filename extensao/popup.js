@@ -39,3 +39,43 @@ $("limpar").onclick = () => {
 chrome.storage.local.get("texto").then(({ texto }) => {
   if (texto) { $("texto").value = texto; itens = LeadHunterParser.analisar(texto); mostrar(); }
 });
+
+
+// --- Conexão com o bot ---
+async function atualizarEstado() {
+  const { url, codigo, ultimoContato, erro } = await chrome.storage.local.get(["url", "codigo", "ultimoContato", "erro"]);
+  $("url").value = url || "";
+  $("codigo").value = codigo || "";
+  if (!url || !codigo) { $("estado").textContent = "⚪ desconectada"; $("conexao").open = true; return; }
+  $("estado").textContent = erro ? "🔴 erro" : "🟢 conectada";
+  $("msgConexao").textContent = erro ? erro :
+    (ultimoContato ? "Último contato: " + new Date(ultimoContato).toLocaleTimeString() : "Aguardando primeiro contato…");
+}
+
+$("salvar").onclick = async () => {
+  await chrome.storage.local.set({ url: $("url").value.trim(), codigo: $("codigo").value.trim(), erro: "" });
+  $("msgConexao").textContent = "Testando…";
+  const r = await chrome.runtime.sendMessage({ tipo: "testar" });
+  if (r.ok) {
+    await chrome.storage.local.set({ ultimoContato: Date.now() });
+    $("msgConexao").textContent = `✅ Conectada! ${r.pendentes} oportunidade(s) esperando.`;
+    $("estado").textContent = "🟢 conectada";
+  } else {
+    $("msgConexao").textContent = "❌ " + r.erro;
+    $("estado").textContent = "🔴 erro";
+  }
+};
+
+$("buscar").onclick = async () => {
+  const max = Math.max(1, Math.min(10, Number($("max").value) || 5));
+  $("buscar").disabled = true;
+  const r = await chrome.runtime.sendMessage({ tipo: "buscar_do_bot", limite: max });
+  $("buscar").disabled = false;
+  $("lista").innerHTML = "";
+  const li = document.createElement("li");
+  li.textContent = r.ok ? (r.n ? `Abri ${r.n} aba(s).` : "Nada novo no bot. Toque em CAÇAR CLIENTES no Telegram.")
+                        : "❌ " + r.erro;
+  $("lista").appendChild(li);
+};
+
+atualizarEstado();

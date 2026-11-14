@@ -22,7 +22,7 @@ TECLADO = ReplyKeyboardMarkup(
      ["VARREDURA TOTAL 360", "BUSCAR MAIS"],
      ["RADAR META", "RADAR SOCIAL"],
      ["MINHA MENSAGEM", "MEUS RESULTADOS"],
-     ["TROCAR PRODUTO"]],
+     ["ABRIR NA EXTENSÃO", "TROCAR PRODUTO"]],
     resize_keyboard=True,
 )
 LIMITE_TELEGRAM = 4000
@@ -94,9 +94,53 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"Acesso não autorizado. Seu ID: {update.effective_user.id}")
         return
     texto = update.message.text or ""
+    if texto.upper().startswith(("ABRIR NA EXTENS", "ABRIR NA EXTENÇ")):
+        await abrir_na_extensao(update, context)
+        return
     if texto.upper().startswith(("VARREDURA", "CAÇAR", "CACAR", "RADAR", "CLIENTES", "BUSCAR")):
         await update.message.reply_text("🔎 Começando a busca. Pode levar alguns minutos…")
     await _rodar_agente(context, update.effective_chat.id, update.effective_user.id, texto)
+
+
+async def conectar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gera o código que liga a extensão do Chrome a este bot."""
+    if not _permitido(update):
+        return
+    if not settings.web_ativo:
+        await update.message.reply_text(
+            "A ponte com a extensão está desligada. Na hospedagem, ligue a Publicação na Web "
+            "e crie as variáveis WEB_ATIVO=1 e URL_PUBLICA (o endereço do seu app).")
+        return
+    storage: Storage = context.application.bot_data["storage"]
+    token = storage.gerar_token_extensao(update.effective_user.id)
+    url = settings.url_publica or "(o endereço do seu app na hospedagem)"
+    await update.message.reply_text(
+        "🔌 Conectar a extensão:\n"
+        "1. No Chrome, clique na extensão LeadHunter → Conexão com o bot.\n"
+        f"2. Endereço: {url}\n"
+        f"3. Código: {token}\n"
+        "4. Clique em Salvar.\n\n"
+        "Não mostre esse código a ninguém. Mandar /conectar de novo gera outro e desliga o antigo.",
+        reply_markup=TECLADO)
+
+
+async def abrir_na_extensao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.application.bot_data["storage"]
+    uid = update.effective_user.id
+    if not storage.extensao_conectada(uid):
+        await update.message.reply_text("A extensão ainda não está conectada. Mande /conectar primeiro.",
+                                        reply_markup=TECLADO)
+        return
+    pendentes = len(storage.oportunidades_pendentes(uid, 200))
+    if not pendentes:
+        await update.message.reply_text("Nenhuma oportunidade nova para abrir. Toque em CAÇAR CLIENTES antes.",
+                                        reply_markup=TECLADO)
+        return
+    n = min(pendentes, 10)
+    storage.pedir_abertura(uid, n)
+    await update.message.reply_text(
+        f"🧭 Pronto! Com o Chrome aberto, a extensão vai abrir {n} oportunidade(s) em até 1 minuto, "
+        "cada uma com a mensagem pronta. Você revisa e envia.", reply_markup=TECLADO)
 
 
 async def digest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -136,6 +180,7 @@ def criar_aplicacao(storage: Storage, agente: LeadHunter) -> Application:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("relatorio", digest_cmd))
     app.add_handler(CommandHandler("limpar", limpar_cmd))
+    app.add_handler(CommandHandler("conectar", conectar_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
     app.job_queue.run_daily(
         digest_diario,

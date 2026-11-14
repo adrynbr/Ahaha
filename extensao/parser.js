@@ -46,6 +46,27 @@
     return itens;
   }
 
-  raiz.LeadHunterParser = { analisar };
-  if (typeof module !== "undefined") module.exports = { analisar };
+  // Converte uma oportunidade vinda do servidor do bot para o formato do cartão.
+  function deServidor(o) {
+    const link = o.link || "";
+    const usuario = (o.usuario || "").replace(/^@/, "");
+    let rede = "outro";
+    if (/instagram\.com/.test(link)) rede = "instagram";
+    else if (/facebook\.com|fb\.com/.test(link)) rede = "facebook";
+    else if (/tiktok\.com/.test(link)) rede = "tiktok";
+    else if (/(^|\.)x\.com|twitter\.com/.test(link)) rede = "x";
+    let perfil = "";
+    if (usuario && rede === "instagram") perfil = "https://www.instagram.com/" + usuario + "/";
+    else if (usuario && rede === "facebook") perfil = "https://www.facebook.com/" + usuario;
+    else if (usuario && rede === "tiktok") perfil = "https://www.tiktok.com/@" + usuario;
+    const data = o.data && o.data !== "não verificada" ? " (" + o.data + ")" : "";
+    return {
+      id: o.id, numero: o.id, titulo: o.sinal || "", link,
+      fala: o.trecho ? "“" + o.trecho + "”" + data : "",
+      sugestao: o.sugestao || "", usuario, rede, perfil,
+    };
+  }
+
+  raiz.LeadHunterParser = { analisar, deServidor };
+  if (typeof module !== "undefined") module.exports = { analisar, deServidor };
 })(typeof self !== "undefined" ? self : globalThis);

@@ -106,6 +106,9 @@ class MetaResponder:
 def criar_app(cfg: Settings, storage: Storage, responder: MetaResponder | None = None) -> FastAPI:
     app = FastAPI(title="LeadHunter webhooks")
     resp = responder or MetaResponder(cfg, storage)
+    from .api_extensao import registrar_rotas
+
+    registrar_rotas(app, storage)
 
     @app.get("/")
     def saude():

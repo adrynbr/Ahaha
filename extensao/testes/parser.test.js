@@ -38,3 +38,11 @@ assert.ok(!itens[2].sugestao.includes("Resumo"), "não pode levar o resumo junto
 assert.strictEqual(itens[0].fala, "“Que maravilha eu quero” (14/11/2026)");
 assert.deepStrictEqual(analisar("texto qualquer sem oportunidades"), []);
 console.log("parser ok:", itens.length, "itens");
+
+const { deServidor } = require("../parser.js");
+const d = deServidor({ id: 7, link: "https://www.instagram.com/p/X/c/1", trecho: "Quero link",
+  data: "11/11/2026", sinal: "Pediu o link", sugestao: "Oi!", usuario: "@laiany_alves" });
+assert.strictEqual(d.perfil, "https://www.instagram.com/laiany_alves/");
+assert.strictEqual(d.fala, "“Quero link” (11/11/2026)");
+assert.strictEqual(d.numero, 7);
+console.log("deServidor ok");

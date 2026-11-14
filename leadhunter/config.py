@@ -48,6 +48,10 @@ class Settings:
     auto_reply_public: str = os.getenv("AUTO_REPLY_PUBLIC", "Te chamei no direct! 💌")
     auto_reply_link: str = os.getenv("AUTO_REPLY_LINK", "")
 
+    # Liga o servidor web (extensão do Chrome). Precisa da "Publicação na Web" na hospedagem.
+    web_ativo: bool = os.getenv("WEB_ATIVO", "").lower() in ("1", "sim", "true")
+    url_publica: str = os.getenv("URL_PUBLICA", "").rstrip("/")
+
     timezone: str = os.getenv("TIMEZONE", "America/Sao_Paulo")
     digest_hour: int = int(os.getenv("DIGEST_HOUR", "7"))
     db_path: str = os.getenv("DB_PATH", "leadhunter.db")

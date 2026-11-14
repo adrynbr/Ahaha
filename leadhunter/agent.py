@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import anthropic
 from anthropic import beta_tool
 
-from . import apify, web
+from . import apify, oportunidades, web
 from .config import settings
 from .prompts import SYSTEM_PROMPT, contexto_usuario
 from .storage import Storage
@@ -102,7 +102,8 @@ def _ferramentas(storage: Storage, user_id: int) -> list:
 
     @beta_tool
     def registrar_oportunidade(
-        fonte: str, link: str, trecho: str, data: str, sinal: str, pontuacao: int, sugestao: str
+        fonte: str, link: str, trecho: str, data: str, sinal: str, pontuacao: int, sugestao: str,
+        usuario: str = "",
     ) -> str:
         """Registra uma oportunidade antes de entregá-la. Recusa duplicadas já entregues antes.
 
@@ -114,9 +115,10 @@ def _ferramentas(storage: Storage, user_id: int) -> list:
             sinal: Intenção direta, Preço, Confiança, Compatibilidade, Logística, Comparação ou Objeção.
             pontuacao: 0 a 100.
             sugestao: Rascunho de resposta personalizado com o link do usuário.
+            usuario: @ da pessoa (sem o @), se aparecer na fonte.
         """
         dados = dict(fonte=fonte, link=link, trecho=trecho, data=data, sinal=sinal,
-                     pontuacao=pontuacao, sugestao=sugestao)
+                     pontuacao=pontuacao, sugestao=sugestao, usuario=usuario.lstrip("@"))
         if not storage.registrar_oportunidade(user_id, dados):
             return "DUPLICADA: já foi entregue antes. Não entregue de novo."
         op_id = storage.oportunidades(user_id, limite=1)[0]["id"]
@@ -420,6 +422,9 @@ class LeadHunter:
             return "⚠️ Sem conexão com o serviço de IA. Tente de novo."
 
         resposta = final if isinstance(final, str) else _texto_final(final)
+        # Salva o que foi entregue no chat (o modelo às vezes não chama registrar_oportunidade).
+        for item in oportunidades.extrair(resposta):
+            self.storage.registrar_oportunidade(user_id, item)
         # Histórico só com texto (barato e simples). Dados importantes ficam nas tabelas.
         self.storage.adicionar_historico(user_id, "user", mensagem)
         self.storage.adicionar_historico(user_id, "assistant", resposta)

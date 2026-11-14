@@ -1,11 +1,19 @@
 {
   "manifest_version": 3,
   "name": "LeadHunter Abridor",
-  "version": "1.0.0",
-  "description": "Abre as oportunidades do LeadHunter em abas, com a mensagem pronta para você revisar e enviar.",
-  "action": { "default_popup": "popup.html", "default_title": "LeadHunter" },
-  "background": { "service_worker": "background.js" },
-  "permissions": ["storage"],
+  "version": "1.1.0",
+  "description": "Abre as oportunidades do LeadHunter em abas, com a mensagem pronta para você revisar e enviar. Conecta ao bot do Telegram.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LeadHunter"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
   "content_scripts": [
     {
       "matches": [
@@ -15,7 +23,9 @@
         "https://x.com/*",
         "https://*.reddit.com/*"
       ],
-      "js": ["cartao.js"],
+      "js": [
+        "cartao.js"
+      ],
       "run_at": "document_idle"
     }
   ]

@@ -26,11 +26,10 @@ async def main() -> None:
 
     storage = Storage(settings.db_path)
     bot = criar_aplicacao(storage, LeadHunter(storage))
-    # O servidor de webhooks só sobe se o "comente QUERO" estiver configurado.
+    # O servidor web só sobe para a extensão do Chrome (WEB_ATIVO) ou o "comente QUERO".
     # Sem ele, o bot do Telegram roda sozinho e não precisa de porta nem link público.
     servidor = None
-    if settings.meta_page_token:
-        # Importado só aqui: fastapi/uvicorn ficam em requirements-meta.txt (opcional).
+    if settings.web_ativo or settings.meta_page_token:
         import uvicorn
 
         from .meta_webhook import criar_app
@@ -41,6 +40,8 @@ async def main() -> None:
         await bot.start()
         await bot.updater.start_polling()
         logging.info("LeadHunter rodando. Abra o bot no Telegram e mande /start.")
+        if servidor:
+            logging.info("Servidor web ligado na porta %s (extensão / webhooks).", settings.port)
         try:
             if servidor:
                 await servidor.serve()  # bloqueia até Ctrl+C

@@ -13,12 +13,25 @@
   button:disabled { opacity: .5; cursor: default; }
   .info { color: #aaa; font-size: 12px; margin-top: 8px; line-height: 1.4; }
   ul { padding-left: 18px; margin: 8px 0 0; max-height: 160px; overflow: auto; font-size: 12px; }
+  details { background: #1a1a1a; border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details input { width: 100%; box-sizing: border-box; margin-top: 6px; background: #1d1d1d; color: #eee;
+                  border: 1px solid #333; border-radius: 6px; padding: 6px; font-size: 12px; }
   label { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; color: #ccc; }
   input[type=number] { width: 52px; background: #1d1d1d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 4px; }
 </style>
 </head>
 <body>
   <h1>🎯 LeadHunter Abridor</h1>
+  <details id="conexao">
+    <summary>🔌 Conexão com o bot <span id="estado"></span></summary>
+    <input id="url" placeholder="Endereço (ex.: https://meu-app.shardweb.app)">
+    <input id="codigo" placeholder="Código (mande /conectar no Telegram)">
+    <button id="salvar">Salvar e testar</button>
+    <div class="info" id="msgConexao"></div>
+  </details>
+  <button id="buscar">📥 Buscar do bot agora</button>
+  <div class="info">Ou cole a resposta do bot abaixo:</div>
   <textarea id="texto" placeholder="Cole aqui a resposta do CAÇAR CLIENTES do Telegram"></textarea>
   <label>Abrir no máximo <input id="max" type="number" min="1" max="10" value="5"> abas de uma vez</label>
   <button id="ler">Ler oportunidades</button>

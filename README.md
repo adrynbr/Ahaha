@@ -53,7 +53,6 @@ O bot do Telegram não precisa de porta nem link público. O "comente QUERO" só
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements-meta.txt  # só se for usar o "comente QUERO"
 cp .env.example .env   # e preencha
 python -m leadhunter
 ```
@@ -67,7 +66,6 @@ Precisa de um app na Meta (developers.facebook.com) ligado à sua Página e ao I
 - URL do webhook: `https://SEU-SERVIDOR/meta/webhook`
 - Token de verificação: o valor de `META_VERIFY_TOKEN`
 - Assine os campos `comments` (Instagram) e `feed` (Página).
-Para isso, inclua as bibliotecas de `requirements-meta.txt` no `requirements.txt`.
 Quando alguém comenta uma palavra de `AUTO_REPLY_KEYWORDS`, o bot manda a DM com `AUTO_REPLY_DM` e responde o comentário com `AUTO_REPLY_PUBLIC`. É uma vez por comentário, como a Meta exige.
 
 ---
@@ -81,7 +79,13 @@ Faz o papel da "Superagent": abre cada oportunidade numa aba, com a mensagem pro
 3. Clique em **Carregar sem compactação** e escolha a pasta `extensao`.
 4. Fixe o ícone 🧩 → LeadHunter Abridor.
 
-Uso: copie a resposta do **CAÇAR CLIENTES** no Telegram, cole na extensão, clique em **Ler oportunidades** e depois em **Abrir abas**. Em cada aba aparece um cartão com **Copiar**, **Colar na caixa** e **Abrir perfil (DM)**.
+Uso manual: copie a resposta do **CAÇAR CLIENTES** no Telegram, cole na extensão, clique em **Ler oportunidades** e depois em **Abrir abas**. Em cada aba aparece um cartão com **Copiar**, **Colar na caixa** e **Abrir perfil (DM)**.
+
+### Conectar a extensão ao bot (abre sozinha)
+1. Na hospedagem, ligue a **Publicação na Web** e crie as variáveis `WEB_ATIVO=1`, `PORT=80` (ou a porta indicada) e `URL_PUBLICA` (o endereço do app). Reinicie.
+2. No Telegram, mande `/conectar` e copie o código.
+3. Na extensão, abra **🔌 Conexão com o bot**, cole o endereço e o código e clique em **Salvar e testar**.
+4. Depois de cada varredura, toque em **ABRIR NA EXTENSÃO** no Telegram: com o Chrome aberto, as abas abrem em até 1 minuto.
 
 ---
 

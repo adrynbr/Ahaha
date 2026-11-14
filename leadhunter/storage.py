@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -40,6 +41,11 @@ CREATE TABLE IF NOT EXISTS config_usuario (
     user_id INTEGER PRIMARY KEY,
     digest INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS extensao (
+    user_id INTEGER PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    pedido INTEGER
+);
 CREATE TABLE IF NOT EXISTS respostas_auto (
     comment_id TEXT PRIMARY KEY,
     criado TEXT NOT NULL
@@ -51,8 +57,9 @@ def _agora() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def chave_oportunidade(link: str, trecho: str) -> str:
-    base = f"{link.strip().lower()}|{trecho.strip().lower()[:200]}"
+def chave_oportunidade(link: str, trecho: str = "") -> str:
+    """O link do comentário identifica a oportunidade (o mesmo link não é entregue duas vezes)."""
+    base = link.strip().lower().rstrip("/")
     return hashlib.sha256(base.encode()).hexdigest()[:32]
 
 
@@ -144,6 +151,51 @@ class Storage:
                 (status, op_id, user_id),
             )
         return cur.rowcount == 1
+
+    def oportunidades_pendentes(self, user_id: int, limite: int = 10) -> list[dict]:
+        """Entregues no chat e ainda não abertas na extensão (mais recentes primeiro)."""
+        return [o for o in self.oportunidades(user_id, limite=200) if o["status"] == "entregue"][:limite]
+
+    def marcar_varias(self, user_id: int, ids: list[int], status: str) -> int:
+        with self._lock, self._conn:
+            cur = self._conn.executemany(
+                "UPDATE oportunidades SET status=? WHERE id=? AND user_id=?",
+                [(status, i, user_id) for i in ids],
+            )
+        return cur.rowcount
+
+    # --- ponte com a extensão do Chrome ---
+    def gerar_token_extensao(self, user_id: int) -> str:
+        token = secrets.token_urlsafe(18)
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO extensao(user_id, token) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET token=excluded.token",
+                (user_id, token),
+            )
+        return token
+
+    def usuario_do_token(self, token: str) -> int | None:
+        if not token:
+            return None
+        row = self._conn.execute("SELECT user_id FROM extensao WHERE token=?", (token,)).fetchone()
+        return row["user_id"] if row else None
+
+    def extensao_conectada(self, user_id: int) -> bool:
+        return self._conn.execute(
+            "SELECT 1 FROM extensao WHERE user_id=?", (user_id,)).fetchone() is not None
+
+    def pedir_abertura(self, user_id: int, limite: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE extensao SET pedido=? WHERE user_id=?", (limite, user_id))
+
+    def pedido_abertura(self, user_id: int) -> int | None:
+        row = self._conn.execute("SELECT pedido FROM extensao WHERE user_id=?", (user_id,)).fetchone()
+        return row["pedido"] if row else None
+
+    def limpar_pedido(self, user_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE extensao SET pedido=NULL WHERE user_id=?", (user_id,))
 
     # --- histórico curto de conversa ---
     def adicionar_historico(self, user_id: int, papel: str, texto: str) -> None:
