@@ -84,6 +84,19 @@ def test_extrair_chamada():
         "a", "ler_pagina", {"url": "https://x"})
     assert agent_mod.extrair_chamada("<<ferramenta trocar_produto>>") == ("", "trocar_produto", {})
     assert agent_mod.extrair_chamada("<<ferramenta buscar_web>>{quebrado}")[2] == {"__erro__": "{quebrado}"}
+    # Caso real da KPA: final malformado depois do JSON
+    real = ('Vou testar buscas.\n\n<<ferramenta buscar_web>>{"consulta":"caneta depiladora '
+            'preço Mercado Livre comprar R$"}<<fim><<fim><<fim>>')
+    assert agent_mod.extrair_chamada(real) == (
+        "Vou testar buscas.", "buscar_web",
+        {"consulta": "caneta depiladora preço Mercado Livre comprar R$"})
+    # Pega a primeira chamada e ignora resultados inventados depois
+    dupla = '<<ferramenta ler_pagina>>{"url": "a"}<<fim>>\n[resultado ler_pagina] x\n<<ferramenta buscar_web>>{}'
+    assert agent_mod.extrair_chamada(dupla)[1:] == ("ler_pagina", {"url": "a"})
+
+
+def test_limpar_marcacoes():
+    assert agent_mod.limpar_marcacoes("Pronto!<<fim><<fim>>") == "Pronto!"
 
 
 def test_sem_base_url_nao_troca(tmp_path, monkeypatch):

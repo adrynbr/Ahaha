@@ -190,7 +190,7 @@ def _texto_final(msg) -> str:
 # devolve o resultado como mensagem comum, sem nenhum bloco especial.
 
 FIM_CHAMADA = "<<fim>>"
-_CHAMADA = re.compile(r"<<ferramenta\s+([a-z_]+)>>\s*(\{.*\})?\s*$", re.S)
+_INICIO = re.compile(r"<<\s*ferramenta\s+([a-z_]+)\s*>>")
 MAX_PASSOS_COMPAT = 25
 
 
@@ -217,18 +217,28 @@ def instrucoes_ferramentas_texto(tools: list) -> str:
 
 
 def extrair_chamada(texto: str) -> tuple[str, str, dict] | None:
-    """Separa (texto_antes, nome, argumentos) se a mensagem termina com uma chamada."""
-    i = texto.rfind("<<ferramenta")
-    if i < 0:
-        return None
-    m = _CHAMADA.match(texto[i:].replace(FIM_CHAMADA, "").strip())
+    """Separa (texto_antes, nome, argumentos) da PRIMEIRA chamada na mensagem.
+
+    Tolerante: ignora o que vier depois do JSON (ex.: '<<fim><<fim>>' malformado,
+    ou resultados que o modelo tenha inventado) e aceita chamada sem argumentos.
+    """
+    m = _INICIO.search(texto)
     if not m:
         return None
+    antes, nome, resto = texto[:m.start()].strip(), m.group(1), texto[m.end():].lstrip()
+    if not resto.startswith("{"):
+        return antes, nome, {}
     try:
-        args = json.loads(m.group(2)) if m.group(2) else {}
+        args, _ = json.JSONDecoder().raw_decode(resto)
     except json.JSONDecodeError:
-        args = {"__erro__": m.group(2)}
-    return texto[:i].strip(), m.group(1), args
+        return antes, nome, {"__erro__": resto[:200]}
+    return antes, nome, args if isinstance(args, dict) else {"__erro__": resto[:200]}
+
+
+def limpar_marcacoes(texto: str) -> str:
+    """Remove restos do protocolo de ferramentas de uma resposta final."""
+    texto = re.sub(r"<<ferramenta[^\n]*", "", texto)
+    return re.sub(r"<<\s*fim\s*>?>?", "", texto).strip()
 
 
 class LeadHunter:
@@ -274,8 +284,8 @@ class LeadHunter:
             texto = "\n".join(b.text for b in msg.content if b.type == "text").strip()
             chamada = extrair_chamada(texto)
             if not chamada:
-                return texto or "(sem resposta)"
-            _, nome, args = chamada
+                return limpar_marcacoes(texto) or "(sem resposta)"
+            antes, nome, args = chamada
             ferramenta = por_nome.get(nome)
             if ferramenta is None:
                 resultado = f"Erro: ferramenta '{nome}' não existe."
@@ -288,14 +298,18 @@ class LeadHunter:
                     resultado = f"Erro ao executar {nome}: {e}"
             log.info("Ferramenta (modo compatível): %s", nome)
             # Só texto: nenhum bloco tool_use/tool_result atravessa o provedor.
-            conversa.append({"role": "assistant", "content": texto + FIM_CHAMADA})
+            # Guarda a chamada na forma correta (sem lixo depois), para o modelo seguir o padrão.
+            chamada_limpa = f"<<ferramenta {nome}>>{json.dumps(args, ensure_ascii=False)}{FIM_CHAMADA}"
+            conversa.append({"role": "assistant",
+                             "content": f"{antes}\n{chamada_limpa}".strip()})
             conversa.append({"role": "user", "content": f"[resultado {nome}]\n{resultado}"})
         conversa.append({"role": "user", "content":
                          "Limite de buscas atingido. Entregue agora o melhor resultado com o que já tem, "
                          "sem chamar ferramentas."})
         msg = self.client.messages.create(model=settings.anthropic_model, max_tokens=16000,
                                           system=system, messages=conversa)
-        return "\n".join(b.text for b in msg.content if b.type == "text").strip() or "(sem resposta)"
+        final = "\n".join(b.text for b in msg.content if b.type == "text")
+        return limpar_marcacoes(final) or "(sem resposta)"
 
     def responder(self, user_id: int, mensagem: str) -> str:
         hoje = datetime.now(ZoneInfo(settings.timezone)).strftime("%d/%m/%Y %H:%M (%A)")
