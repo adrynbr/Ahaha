@@ -15,6 +15,10 @@ from .telegram_bot import criar_aplicacao
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # httpx registra a URL de cada chamada, e a URL do Telegram contém o token do bot.
+    # Silencia esses logs (também evita uma linha a cada 10 segundos).
+    for nome in ("httpx", "httpx2", "httpcore", "apscheduler"):
+        logging.getLogger(nome).setLevel(logging.WARNING)
     faltando = [n for n, v in [("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY")),
                                ("TELEGRAM_BOT_TOKEN", settings.telegram_token)] if not v]
     if faltando:
