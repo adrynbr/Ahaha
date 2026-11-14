@@ -216,16 +216,30 @@ def instrucoes_ferramentas_texto(tools: list) -> str:
     return "\n".join(linhas)
 
 
-def extrair_chamada(texto: str) -> tuple[str, str, dict] | None:
+def extrair_chamada(texto: str, nomes: set[str] | None = None) -> tuple[str, str, dict] | None:
     """Separa (texto_antes, nome, argumentos) da PRIMEIRA chamada na mensagem.
 
-    Tolerante: ignora o que vier depois do JSON (ex.: '<<fim><<fim>>' malformado,
-    ou resultados que o modelo tenha inventado) e aceita chamada sem argumentos.
+    Tolerante a formatos variados que o modelo usa via provedores compatíveis:
+      <<ferramenta buscar_web>>{"consulta": "x"}<<fim>>
+      <tool_call>agente>ler_pagina{"url": "https://..."}
+    Com `nomes`, reconhece qualquer nome de ferramenta conhecido seguido de um JSON.
+    Ignora o que vier depois do JSON (finais malformados, resultados inventados).
     """
+    candidatos = []
     m = _INICIO.search(texto)
-    if not m:
+    if m:
+        candidatos.append((m.start(), m.end(), m.group(1)))
+    if nomes:
+        alternativas = "|".join(re.escape(n) for n in sorted(nomes, key=len, reverse=True))
+        m2 = re.search(rf"(?<![a-z_])({alternativas})(?![a-z_])[ \t>\]\)\"':]*(?=\{{)", texto)
+        if m2:
+            candidatos.append((m2.start(), m2.end(), m2.group(1)))
+    if not candidatos:
         return None
-    antes, nome, resto = texto[:m.start()].strip(), m.group(1), texto[m.end():].lstrip()
+    inicio, fim, nome = min(candidatos)
+    # Tira a "marcação" que antecede o nome na mesma linha (ex.: "<tool_call>agente>").
+    antes = re.sub(r"[<\[][^\n]*$", "", texto[:inicio]).strip()
+    resto = texto[fim:].lstrip()
     if not resto.startswith("{"):
         return antes, nome, {}
     try:
@@ -238,6 +252,7 @@ def extrair_chamada(texto: str) -> tuple[str, str, dict] | None:
 def limpar_marcacoes(texto: str) -> str:
     """Remove restos do protocolo de ferramentas de uma resposta final."""
     texto = re.sub(r"<<ferramenta[^\n]*", "", texto)
+    texto = re.sub(r"</?tool_call>[^\n]*", "", texto)
     return re.sub(r"<<\s*fim\s*>?>?", "", texto).strip()
 
 
@@ -282,7 +297,7 @@ class LeadHunter:
             if msg.stop_reason == "refusal":
                 return "⚠️ Não consegui completar esse pedido. Tente reformular."
             texto = "\n".join(b.text for b in msg.content if b.type == "text").strip()
-            chamada = extrair_chamada(texto)
+            chamada = extrair_chamada(texto, set(por_nome))
             if not chamada:
                 return limpar_marcacoes(texto) or "(sem resposta)"
             antes, nome, args = chamada

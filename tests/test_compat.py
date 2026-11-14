@@ -95,8 +95,22 @@ def test_extrair_chamada():
     assert agent_mod.extrair_chamada(dupla)[1:] == ("ler_pagina", {"url": "a"})
 
 
+def test_formato_tool_call_da_kpa():
+    nomes = {"ler_pagina", "buscar_web", "salvar_produto"}
+    real = ('Vou registrar a página do Migazero como seu produto.<tool_call>agente>'
+            'ler_pagina{"url":"https://pratikasa.vercel.app/migazero"}')
+    assert agent_mod.extrair_chamada(real, nomes) == (
+        "Vou registrar a página do Migazero como seu produto.", "ler_pagina",
+        {"url": "https://pratikasa.vercel.app/migazero"})
+    # Nome citado em texto comum, sem JSON, não é chamada
+    assert agent_mod.extrair_chamada("Posso usar ler_pagina depois.", nomes) is None
+    # Nome desconhecido seguido de JSON não é chamada
+    assert agent_mod.extrair_chamada('outra{"a": 1}', nomes) is None
+
+
 def test_limpar_marcacoes():
     assert agent_mod.limpar_marcacoes("Pronto!<<fim><<fim>>") == "Pronto!"
+    assert agent_mod.limpar_marcacoes("Ok.\n<tool_call>agente>x{}") == "Ok."
 
 
 def test_sem_base_url_nao_troca(tmp_path, monkeypatch):
