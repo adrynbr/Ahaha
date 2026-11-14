@@ -33,6 +33,14 @@ Você precisa de:
 | Apify (opcional, comentários IG/TikTok/Biblioteca) | apify.com | tem plano grátis |
 | Servidor | Railway, Render ou uma VPS | ~US$5/mês |
 
+### Subir na Shard Cloud (ou Square Cloud / Discloud)
+1. Baixe [`dist/leadhunter-shardcloud.zip`](dist/leadhunter-shardcloud.zip) e envie como um novo app **Python**.
+2. Arquivo principal: `main.py`. Memória: 256 MB é suficiente (o bot usa ~100 MB).
+3. Coloque as variáveis do [`.env.example`](.env.example) no painel de variáveis de ambiente do app. Se não houver painel, renomeie `.env.example` para `.env` dentro do zip e preencha.
+4. Inicie o app e mande `/start` para o seu bot no Telegram.
+
+O bot do Telegram não precisa de porta nem link público. O "comente QUERO" só liga se você preencher as variáveis `META_*`, e aí precisa de um link público (plano com site/domínio).
+
 ### Subir no Railway (sem precisar de computador)
 1. Entre em railway.app com sua conta do GitHub → **New Project → Deploy from GitHub repo** → escolha este repositório.
 2. Em **Variables**, cole as variáveis do arquivo [`.env.example`](.env.example) com os seus valores (no mínimo `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`).

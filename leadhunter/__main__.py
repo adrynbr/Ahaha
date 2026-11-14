@@ -25,17 +25,24 @@ async def main() -> None:
 
     storage = Storage(settings.db_path)
     bot = criar_aplicacao(storage, LeadHunter(storage))
-    servidor = uvicorn.Server(uvicorn.Config(criar_app(settings, storage), host="0.0.0.0",
-                                             port=settings.port, log_level="info"))
+    # O servidor de webhooks só sobe se o "comente QUERO" estiver configurado.
+    # Sem ele, o bot do Telegram roda sozinho e não precisa de porta nem link público.
+    servidor = None
+    if settings.meta_page_token:
+        servidor = uvicorn.Server(uvicorn.Config(criar_app(settings, storage), host="0.0.0.0",
+                                                 port=settings.port, log_level="info"))
     async with bot:
         await bot.start()
         await bot.updater.start_polling()
+        logging.info("LeadHunter rodando. Abra o bot no Telegram e mande /start.")
         try:
-            await servidor.serve()  # bloqueia até Ctrl+C
+            if servidor:
+                await servidor.serve()  # bloqueia até Ctrl+C
+            else:
+                await asyncio.Event().wait()
         finally:
             await bot.updater.stop()
             await bot.stop()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
