@@ -240,7 +240,11 @@ class LeadHunter:
             return "⏳ Limite de uso atingido. Tente de novo mais tarde."
         except anthropic.APIStatusError as e:
             log.exception("Erro da API Claude")
-            return f"⚠️ Erro no serviço de IA ({e.status_code}). Tente de novo mais tarde."
+            # Mostra o motivo no chat: em hospedagens simples o log nem sempre está acessível.
+            detalhe = (getattr(e, "message", "") or str(e))[:400]
+            modo = "compatível" if self.compat else "oficial"
+            return (f"⚠️ Erro no serviço de IA ({e.status_code}, modo {modo}).\n"
+                    f"Detalhe: {detalhe}")
         except anthropic.APIConnectionError:
             return "⚠️ Sem conexão com o serviço de IA. Tente de novo."
 

@@ -55,7 +55,8 @@ def test_sem_base_url_nao_troca(tmp_path, monkeypatch):
             "type": "invalid_request_error", "message": "bad"}})
 
     lh = agent_mod.LeadHunter(Storage(str(tmp_path / "t.db")), _cliente(handler))
-    assert "Erro no serviço de IA (400)" in lh.responder(1, "oi")
+    r = lh.responder(1, "oi")
+    assert "Erro no serviço de IA (400" in r and "bad" in r
     assert lh.compat is False
 
 
