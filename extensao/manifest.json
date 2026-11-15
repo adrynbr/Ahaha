@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "LeadHunter Abridor",
+  "version": "1.2.0",
+  "description": "Abre as oportunidades do LeadHunter com a mensagem pronta e deixa o bot ler comentários no seu navegador (só leitura). Nunca envia nada sozinho.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LeadHunter"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.instagram.com/*",
+    "https://*.facebook.com/*",
+    "https://*.fb.com/*",
+    "https://*.tiktok.com/*",
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://*.threads.net/*",
+    "https://*.threads.com/*",
+    "https://*.youtube.com/*",
+    "https://*.reddit.com/*",
+    "https://*.mercadolivre.com.br/*",
+    "https://*.shopee.com.br/*",
+    "https://*.reclameaqui.com.br/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.instagram.com/*",
+        "https://*.facebook.com/*",
+        "https://*.tiktok.com/*",
+        "https://x.com/*",
+        "https://*.reddit.com/*"
+      ],
+      "js": [
+        "cartao.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
