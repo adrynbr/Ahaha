@@ -395,6 +395,22 @@ class LeadHunter:
         # fallbacks, cache). Usado em provedores como a KPA Labz.
         self.compat = settings.modo_compativel in ("sim", "1", "true")
 
+    # Provedor fora do ar por instantes (503/529): espera e tenta de novo, sem perder a missão.
+    ESPERAS_INSTAVEL = (20, 60, 120)
+    STATUS_INSTAVEL = {500, 502, 503, 504, 529}
+
+    def _criar(self, **kwargs):
+        for espera in (*self.ESPERAS_INSTAVEL, None):
+            try:
+                return self.client.messages.create(**kwargs)
+            except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+                status = getattr(e, "status_code", None)
+                instavel = isinstance(e, anthropic.APIConnectionError) or status in self.STATUS_INSTAVEL
+                if not instavel or espera is None:
+                    raise
+                log.warning("Serviço de IA instável (%s); nova tentativa em %ss.", status, espera)
+                time.sleep(espera)
+
     def _chamar(self, user_id: int, mensagens: list[dict]):
         if self.compat:
             return self._chamar_compat(user_id, mensagens)
@@ -420,7 +436,7 @@ class LeadHunter:
         conversa = list(mensagens)
         correcoes = 0
         for _ in range(MAX_PASSOS_COMPAT):
-            msg = self.client.messages.create(
+            msg = self._criar(
                 model=settings.anthropic_model,
                 max_tokens=16000,
                 system=system,
@@ -464,7 +480,7 @@ class LeadHunter:
         conversa.append({"role": "user", "content":
                          "Limite de buscas atingido. Entregue agora o melhor resultado com o que já tem, "
                          "sem chamar ferramentas."})
-        msg = self.client.messages.create(model=settings.anthropic_model, max_tokens=16000,
+        msg = self._criar(model=settings.anthropic_model, max_tokens=16000,
                                           system=system, messages=conversa)
         final = "\n".join(b.text for b in msg.content if b.type == "text")
         return limpar_marcacoes(final) or "(sem resposta)"
@@ -505,6 +521,11 @@ class LeadHunter:
             # Mostra o motivo no chat: em hospedagens simples o log nem sempre está acessível.
             detalhe = (getattr(e, "message", "") or str(e))[:400]
             modo = "compatível" if self.compat else "oficial"
+            if e.status_code in self.STATUS_INSTAVEL:
+                return ("⚠️ O serviço de IA (KPA) ficou fora do ar e não voltou depois de 3 novas "
+                        "tentativas. Mande o comando de novo em alguns minutos. O que já foi achado "
+                        "nesta busca ficou salvo (MEUS RESULTADOS).\n"
+                        f"Detalhe: {e.status_code} {detalhe[:150]}")
             return (f"⚠️ Erro no serviço de IA ({e.status_code}, modo {modo}).\n"
                     f"Detalhe: {detalhe}")
         except anthropic.APIConnectionError:

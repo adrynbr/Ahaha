@@ -145,3 +145,36 @@ def test_juntar_e_quadros_de_verdade(tmp_path):
     jpg = str(tmp_path / "q.jpg")
     assert video.quadros(out, jpg) is None
     assert (tmp_path / "q.jpg").stat().st_size > 1000
+
+
+# --- provedor instável (503) ---
+
+def _cliente(respostas):
+    def handler(req):
+        st = respostas.pop(0)
+        if st != 200:
+            return httpx2.Response(st, json={"type": "error", "error": {"type": "api_error", "message": "indisponível"}})
+        corpo = json.loads(req.content)
+        return httpx2.Response(200, json={
+            "id": "m", "type": "message", "role": "assistant", "model": corpo["model"],
+            "content": [{"type": "text", "text": "Achei 3 anunciantes."}], "stop_reason": "end_turn",
+            "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}})
+    return anthropic.Anthropic(api_key="t", max_retries=0,
+                               http_client=httpx2.Client(transport=httpx2.MockTransport(handler)))
+
+
+def test_503_espera_e_tenta_de_novo(tmp_path, monkeypatch):
+    monkeypatch.setattr(LeadHunter, "ESPERAS_INSTAVEL", (0, 0, 0))
+    s = Storage(str(tmp_path / "t.db"))
+    lh = LeadHunter(s, _cliente([503, 529, 200]))
+    lh.compat = True
+    assert lh.responder(1, "RADAR META") == "Achei 3 anunciantes."
+
+
+def test_503_persistente_mensagem_clara(tmp_path, monkeypatch):
+    monkeypatch.setattr(LeadHunter, "ESPERAS_INSTAVEL", (0, 0, 0))
+    s = Storage(str(tmp_path / "t.db"))
+    lh = LeadHunter(s, _cliente([503] * 4))
+    lh.compat = True
+    r = lh.responder(1, "RADAR META")
+    assert "fora do ar" in r and "MEUS RESULTADOS" in r
