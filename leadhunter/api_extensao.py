@@ -18,6 +18,14 @@ class Confirmacao(BaseModel):
     ids: list[int]
 
 
+class ResultadoLeitura(BaseModel):
+    texto: str = ""
+    erro: str = ""
+
+
+MAX_LEITURA = 30_000
+
+
 def _item(o: dict) -> dict:
     return {k: o.get(k, "") for k in
             ("id", "fonte", "link", "trecho", "data", "sinal", "pontuacao", "sugestao", "usuario")}
@@ -58,6 +66,29 @@ def registrar_rotas(app: FastAPI, storage: Storage) -> None:
         """Botão 'Buscar do bot agora' na extensão (sem precisar do pedido no Telegram)."""
         uid = usuario(authorization)
         return {"itens": [_item(o) for o in storage.oportunidades_pendentes(uid, min(limite, 20))]}
+
+    @app.get("/api/extensao/tarefas")
+    def tarefas(leitura: int = 1, authorization: str | None = Header(default=None)):
+        """Páginas que o agente pediu para ler no navegador do usuário (já logado).
+
+        A extensão chama isto a cada poucos segundos; `leitura=0` = usuário desligou as leituras.
+        """
+        uid = usuario(authorization)
+        storage.registrar_visto(uid, bool(leitura))
+        if not leitura:
+            return {"tarefas": []}
+        return {"tarefas": storage.pegar_tarefas_navegador(uid)}
+
+    @app.post("/api/extensao/tarefa/{tarefa_id}")
+    def resultado_tarefa(tarefa_id: int, dados: ResultadoLeitura,
+                         authorization: str | None = Header(default=None)):
+        uid = usuario(authorization)
+        texto = dados.texto[:MAX_LEITURA] if dados.texto else ""
+        if dados.erro and not texto:
+            texto = f"Erro na extensão: {dados.erro[:300]}"
+        if not storage.concluir_tarefa_navegador(uid, tarefa_id, texto or "Página sem texto."):
+            raise HTTPException(404, "Tarefa não encontrada.")
+        return {"ok": True}
 
     @app.post("/api/extensao/confirmar")
     def confirmar(dados: Confirmacao, authorization: str | None = Header(default=None)):

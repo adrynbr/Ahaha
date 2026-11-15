@@ -104,7 +104,7 @@ extensao/          extensão do Chrome "LeadHunter Abridor" (Manifest V3)
   testes/parser.test.js
 
 skill/leadhunter/SKILL.md   versão Skill para o app do Claude
-tests/                      testes Python (pytest): 31 testes passando
+tests/                      testes Python (pytest): 39 testes passando
 dist/                       zips prontos:
   leadhunter-shardcloud.zip   → enviar na Shard Cloud
   leadhunter-extensao.zip     → instalar no Chrome
@@ -258,7 +258,7 @@ Testado num Chromium com páginas falsas do Instagram/Facebook e o servidor real
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt pytest
-python -m pytest -q                       # 31 testes
+python -m pytest -q                       # 39 testes
 node extensao/testes/parser.test.js       # teste do leitor da extensão
 python main.py                            # roda local (precisa do .env)
 
@@ -266,7 +266,7 @@ python main.py                            # roda local (precisa do .env)
 python3 -c "
 import zipfile,glob
 z=zipfile.ZipFile('dist/leadhunter-shardcloud.zip','w',zipfile.ZIP_DEFLATED)
-for f in ['main.py','requirements.txt','.env.example']+sorted(glob.glob('leadhunter/*.py')): z.write(f)
+for f in ['main.py','requirements.txt','.env.example']+sorted(glob.glob('leadhunter/*.py'))+['extensao/'+x for x in ['manifest.json','parser.js','popup.html','popup.js','background.js','cartao.js']]: z.write(f)
 z.close()
 z=zipfile.ZipFile('dist/leadhunter-extensao.zip','w',zipfile.ZIP_DEFLATED)
 for f in ['manifest.json','parser.js','popup.html','popup.js','background.js','cartao.js']: z.write('extensao/'+f)
@@ -281,3 +281,25 @@ Formato que a extensão e o bot entendem nas respostas (não mudar sem atualizar
 💬 "Quero o link" (14/11/2026)
 ✍️ Sugestão de resposta: Oi! ... https://pratikasa.vercel.app/migazero
 ```
+
+---
+
+## 14. Atualização de 14/11/2026 — funções das aulas 1 e 2 do curso
+
+Assisti (pela transcrição e trechos dos vídeos) as duas aulas do "Agente Vendedor". O que foi copiado:
+
+**Aula 1 (prospecção com a Superagent):**
+- **O bot lê páginas no meu Chrome logado** (`ler_no_navegador`): a extensão abre a página em aba de fundo, rola os comentários, devolve o texto e fecha. Só leitura. Só aparece para a IA quando a extensão falou com o bot nos últimos 3 min e a caixa "Deixar o bot ler páginas aqui" está marcada. Sites: redes sociais, Mercado Livre, Shopee, Reclame Aqui. API: `GET /api/extensao/tarefas`, `POST /api/extensao/tarefa/{id}`. A extensão consulta a cada 4 s durante ~25 s a cada alarme de 30 s.
+- **Quantidade livre:** "quero 50 leads" funciona (padrão 10, até 50; limite de passos subiu para 40).
+- **Abordagem natural** no prompt: nome da pessoa, responder a dúvida exata, cupom com prazo (sem inventar cupom).
+- **Rotinas / "workflow"**: "todo dia às 6h faça X" → ferramentas `criar_rotina`, `listar_rotinas`, `apagar_rotina` (tabela `rotinas`, checada a cada minuto, máx. 5).
+- **/extensao**: o bot manda o zip da extensão com o passo a passo.
+- Áudio: o bot ainda não ouve (responde pedindo texto; o teclado do celular dita).
+
+**Aula 2 (assistente do dia a dia):**
+- `CRIATIVOS CAMPEÕES` (Biblioteca: dias ativos, nº de cópias, copy exata, padrões, preço no mapa, 3 roteiros), `ROTEIRO DE CRIATIVO`, `MONTAR CAMPANHA`, `ATENDIMENTO`, `ANALISAR MINHA PÁGINA`, `ACHAR PRODUTO`, `CONTEÚDO`, `MINHAS ROTINAS`. Botão `MAIS FUNÇÕES` mostra o menu.
+- **Prints**: foto enviada vai para a IA analisar (anúncio, métricas, página).
+- **Vídeos** (`leadhunter/video.py`, ffmpeg via pacote `imageio-ffmpeg`): `ANALISAR VÍDEO` (grade 3x3 de quadros para a IA dar nota) e `JUNTAR VÍDEOS` (junta em 720x1280 e devolve no chat). Limites: 20 MB por vídeo para baixar, 50 MB para enviar.
+- **Não feito (difícil/sem chave):** legendas automáticas (precisa transcrever áudio → usar CapCut), editar voz, gerar vídeo com IA, entrar na conta de anúncios/Kaiross (sem login do usuário; mandar print funciona).
+
+**Para usar:** enviar o zip novo na Shard (o `requirements.txt` agora tem `imageio-ffmpeg`, ~30 MB de instalação) e reinstalar a extensão (versão 1.2.0, pede permissão nova "ler e alterar dados" nos sites de redes sociais, necessária para ler os comentários).

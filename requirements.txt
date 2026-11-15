@@ -5,3 +5,5 @@ python-dotenv>=1.0
 # Servidor web (extensão do Chrome e "comente QUERO")
 fastapi>=0.115
 uvicorn>=0.30
+# ffmpeg embutido (juntar vídeos e analisar criativos)
+imageio-ffmpeg>=0.5

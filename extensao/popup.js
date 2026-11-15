@@ -43,7 +43,10 @@ chrome.storage.local.get("texto").then(({ texto }) => {
 
 // --- Conexão com o bot ---
 async function atualizarEstado() {
-  const { url, codigo, ultimoContato, erro } = await chrome.storage.local.get(["url", "codigo", "ultimoContato", "erro"]);
+  const { url, codigo, ultimoContato, erro, leitura = true, leituras = 0 } =
+    await chrome.storage.local.get(["url", "codigo", "ultimoContato", "erro", "leitura", "leituras"]);
+  $("leitura").checked = leitura;
+  $("leituras").textContent = leituras ? `Páginas lidas para o bot: ${leituras}` : "";
   $("url").value = url || "";
   $("codigo").value = codigo || "";
   if (!url || !codigo) { $("estado").textContent = "⚪ desconectada"; $("conexao").open = true; return; }
@@ -51,6 +54,8 @@ async function atualizarEstado() {
   $("msgConexao").textContent = erro ? erro :
     (ultimoContato ? "Último contato: " + new Date(ultimoContato).toLocaleTimeString() : "Aguardando primeiro contato…");
 }
+
+$("leitura").onchange = () => chrome.storage.local.set({ leitura: $("leitura").checked });
 
 $("salvar").onclick = async () => {
   await chrome.storage.local.set({ url: $("url").value.trim(), codigo: $("codigo").value.trim(), erro: "" });

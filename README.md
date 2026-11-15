@@ -58,8 +58,13 @@ python -m leadhunter
 ```
 
 ### Comandos no Telegram
-Botões prontos: `CAÇAR CLIENTES`, `CLIENTES QUENTES`, `VARREDURA TOTAL 360`, `BUSCAR MAIS`, `RADAR META`, `RADAR SOCIAL`, `MINHA MENSAGEM`, `MEUS RESULTADOS`, `TROCAR PRODUTO`.
-Também: `ESSE COMPROU #3`, `ESSE NÃO ERA #5`, `/relatorio off` (desliga as 7h), `/limpar` (reinicia a conversa).
+Botões prontos: `CAÇAR CLIENTES`, `CLIENTES QUENTES`, `VARREDURA TOTAL 360`, `BUSCAR MAIS`, `RADAR META`, `RADAR SOCIAL`, `CRIATIVOS CAMPEÕES`, `MONTAR CAMPANHA`, `MINHA MENSAGEM`, `MEUS RESULTADOS`, `ABRIR NA EXTENSÃO`, `MAIS FUNÇÕES` (mostra o menu completo).
+Também: `ROTEIRO DE CRIATIVO`, `ATENDIMENTO`, `ANALISAR MINHA PÁGINA`, `ACHAR PRODUTO`, `CONTEÚDO`, `MINHAS ROTINAS`, `TROCAR PRODUTO`, `ESSE COMPROU #3`, `ESSE NÃO ERA #5`, `/relatorio off` (desliga as 7h), `/limpar` (reinicia a conversa), `/extensao` (manda o zip da extensão), `/menu`.
+
+- **Pedidos livres:** "preciso de 50 clientes para hoje", "procure no X quem quer comprar".
+- **Rotinas (fluxos de trabalho):** "todo dia às 6h traga comentários 'quero' do TikTok das últimas 24h". Cancelar: "cancele a rotina #2".
+- **Prints:** mande foto de um anúncio, das métricas ou de uma página e peça a análise.
+- **Vídeos (até 20 MB cada):** mande os vídeos e toque/escreva `ANALISAR VÍDEO` (nota e melhorias) ou `JUNTAR VÍDEOS` (junta em 9:16 e devolve). Legenda automática: CapCut. Áudio/voz ainda não é ouvido.
 
 ### "Comente QUERO" (opcional)
 Precisa de um app na Meta (developers.facebook.com) ligado à sua Página e ao Instagram profissional, com permissões `instagram_manage_comments`, `instagram_manage_messages`, `pages_manage_engagement`, `pages_messaging`.
@@ -86,6 +91,9 @@ Uso manual: copie a resposta do **CAÇAR CLIENTES** no Telegram, cole na extens�
 2. No Telegram, mande `/conectar` e copie o código.
 3. Na extensão, abra **🔌 Conexão com o bot**, cole o endereço e o código e clique em **Salvar e testar**.
 4. Depois de cada varredura, toque em **ABRIR NA EXTENSÃO** no Telegram: com o Chrome aberto, as abas abrem em até 1 minuto.
+
+### O bot lendo páginas no seu Chrome (como a Superagent)
+Com a extensão conectada e o Chrome aberto (logado no Instagram/TikTok/Facebook), o agente ganha a ferramenta `ler_no_navegador`: durante a busca ele pede uma página, a extensão abre numa aba de fundo, rola os comentários, copia o texto e fecha a aba. Assim ele lê comentários que sem login não aparecem. **Só leitura**: nada é curtido, comentado ou enviado. Dá para desligar na extensão (caixa "Deixar o bot ler páginas aqui"). Sites permitidos: redes sociais, Mercado Livre, Shopee, Reclame Aqui.
 
 ---
 

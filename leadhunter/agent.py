@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from datetime import datetime
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import anthropic
@@ -52,6 +54,34 @@ def _ferramentas_web() -> list:
         return web.ler_pagina(url)
 
     return [buscar_web, ler_pagina]
+
+
+MAX_ROTINAS = 5
+DOMINIOS_NAVEGADOR = ("instagram.com", "tiktok.com", "facebook.com", "fb.com", "x.com",
+                      "twitter.com", "threads.net", "threads.com", "youtube.com", "reddit.com",
+                      "mercadolivre.com.br", "shopee.com.br", "reclameaqui.com.br")
+
+
+def ler_via_extensao(storage: Storage, user_id: int, url: str, espera: float = 150,
+                     intervalo: float = 2, sem_resposta: float = 60) -> str:
+    """Cria a tarefa para a extensão e espera o texto da página voltar."""
+    host = (urlparse(url).hostname or "").lower()
+    if not url.startswith("https://") or not any(
+            host == d or host.endswith("." + d) for d in DOMINIOS_NAVEGADOR):
+        return ("A extensão só lê redes sociais e marketplaces (Instagram, TikTok, Facebook, X, "
+                "Mercado Livre, Shopee...). Para outros sites use ler_pagina.")
+    tid = storage.criar_tarefa_navegador(user_id, url)
+    inicio = time.monotonic()
+    while time.monotonic() - inicio < espera:
+        t = storage.tarefa_navegador(tid) or {}
+        if t.get("status") == "feita":
+            return t.get("resultado") or "Página sem texto."
+        if t.get("status") == "nova" and time.monotonic() - inicio > sem_resposta:
+            break
+        time.sleep(intervalo)
+    storage.cancelar_tarefa_navegador(tid)
+    return ("A extensão não respondeu (Chrome fechado ou computador desligado). "
+            "Siga com busca_web/apify e avise o usuário.")
 
 
 def _ferramentas(storage: Storage, user_id: int) -> list:
@@ -147,8 +177,62 @@ def _ferramentas(storage: Storage, user_id: int) -> list:
         ok = storage.marcar_oportunidade(user_id, op_id, status)
         return "Atualizado." if ok else "Oportunidade não encontrada."
 
+    @beta_tool
+    def criar_rotina(hora: int, pedido: str, minuto: int = 0) -> str:
+        """Agenda uma tarefa que roda sozinha todo dia e manda o resultado no Telegram
+        (o "fluxo de trabalho"). Ex.: 6h, "varrer vídeos novos do TikTok e trazer só comentários
+        'quero'/'onde compro' das últimas 24h".
+
+        Args:
+            hora: Hora do dia, 0 a 23 (fuso de São Paulo).
+            pedido: O que fazer, escrito como um pedido completo para o agente.
+            minuto: Minuto, 0 a 59.
+        """
+        if not (0 <= hora <= 23 and 0 <= minuto <= 59):
+            return "Horário inválido."
+        if len(storage.rotinas(user_id)) >= MAX_ROTINAS:
+            return f"Limite de {MAX_ROTINAS} rotinas. Apague uma antes (apagar_rotina)."
+        agora = datetime.now(ZoneInfo(settings.timezone))
+        ja_passou = (agora.hour, agora.minute) >= (hora, minuto)
+        rid = storage.criar_rotina(user_id, hora, minuto, pedido.strip(),
+                                   agora.date().isoformat(), ja_passou)
+        quando = "amanhã" if ja_passou else "hoje"
+        return f"Rotina #{rid} criada: todo dia às {hora:02d}:{minuto:02d} (primeira {quando})."
+
+    @beta_tool
+    def listar_rotinas() -> str:
+        """Lista as rotinas diárias agendadas do usuário."""
+        rs = storage.rotinas(user_id)
+        if not rs:
+            return "Nenhuma rotina agendada."
+        return "\n".join(f"#{r['id']} às {r['hora']:02d}:{r['minuto']:02d}: {r['pedido']}" for r in rs)
+
+    @beta_tool
+    def apagar_rotina(rotina_id: int) -> str:
+        """Cancela uma rotina diária.
+
+        Args:
+            rotina_id: Número da rotina (#id).
+        """
+        return "Rotina apagada." if storage.apagar_rotina(user_id, rotina_id) else "Rotina não encontrada."
+
     tools = [salvar_produto, trocar_produto, salvar_nota, registrar_oportunidade,
-             listar_oportunidades, marcar_oportunidade]
+             listar_oportunidades, marcar_oportunidade, criar_rotina, listar_rotinas, apagar_rotina]
+
+    if storage.extensao_online(user_id):
+        @beta_tool
+        def ler_no_navegador(url: str) -> str:
+            """Abre a página no Chrome do usuário (logado no Instagram/TikTok/Facebook), rola os
+            comentários e devolve o texto da página. Só LÊ: nunca curte, comenta ou envia nada.
+            Use para ler comentários que exigem login. Máximo ~8 leituras por missão (cada uma
+            leva 10-40 s).
+
+            Args:
+                url: Endereço completo (Instagram, TikTok, Facebook, Biblioteca de Anúncios, X, etc.).
+            """
+            return ler_via_extensao(storage, user_id, url)
+
+        tools.append(ler_no_navegador)
 
     if settings.apify_token:
         @beta_tool
@@ -194,7 +278,7 @@ def _texto_final(msg) -> str:
 
 FIM_CHAMADA = "<<fim>>"
 _INICIO = re.compile(r"<<\s*ferramenta\s+([a-z_]+)\s*>>")
-MAX_PASSOS_COMPAT = 25
+MAX_PASSOS_COMPAT = 40
 
 
 def instrucoes_ferramentas_texto(tools: list) -> str:
@@ -286,7 +370,7 @@ MSG_CORRECAO = (
     '<<ferramenta NOME>>{"parametro": "valor"}' + FIM_CHAMADA + " (NOME é um dos nomes da lista). "
     "Se já tem a resposta final, escreva-a sem nenhuma marcação, em português."
 )
-_PISTAS = re.compile(r"<<|>>|<\s*/?\s*tool|\{\s*\"(consulta|url|texto|nome|op_id|limite|ator)\"")
+_PISTAS = re.compile(r"<<|>>|<\s*/?\s*tool|\{\s*\"(consulta|url|texto|nome|op_id|limite|ator|hora|pedido|rotina_id)\"")
 
 
 def parece_chamada(texto: str) -> bool:
@@ -385,14 +469,19 @@ class LeadHunter:
         final = "\n".join(b.text for b in msg.content if b.type == "text")
         return limpar_marcacoes(final) or "(sem resposta)"
 
-    def responder(self, user_id: int, mensagem: str) -> str:
+    def responder(self, user_id: int, mensagem: str,
+                  imagens: list[tuple[str, str]] | None = None) -> str:
+        """`imagens`: lista de (tipo, base64), ex.: prints de anúncio ou quadros de um vídeo."""
         hoje = datetime.now(ZoneInfo(settings.timezone)).strftime("%d/%m/%Y %H:%M (%A)")
         contexto = contexto_usuario(
             self.storage.obter_produto(user_id), self.storage.notas(user_id), hoje
         )
-        mensagens = self.storage.historico(user_id) + [
-            {"role": "user", "content": f"{contexto}\n\n{mensagem}"}
-        ]
+        texto = f"{contexto}\n\n{mensagem}"
+        conteudo: str | list = texto
+        if imagens:
+            conteudo = [{"type": "image", "source": {"type": "base64", "media_type": tipo, "data": dados}}
+                        for tipo, dados in imagens] + [{"type": "text", "text": texto}]
+        mensagens = self.storage.historico(user_id) + [{"role": "user", "content": conteudo}]
 
         try:
             try:
@@ -426,6 +515,7 @@ class LeadHunter:
         for item in oportunidades.extrair(resposta):
             self.storage.registrar_oportunidade(user_id, item)
         # Histórico só com texto (barato e simples). Dados importantes ficam nas tabelas.
-        self.storage.adicionar_historico(user_id, "user", mensagem)
+        marca = f"[{len(imagens)} imagem(ns) enviada(s)] " if imagens else ""
+        self.storage.adicionar_historico(user_id, "user", marca + mensagem)
         self.storage.adicionar_historico(user_id, "assistant", resposta)
         return resposta
